@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>{{ page_title }}</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">{{ page_title }}</div>
+                <div class="brand-subtitle">Activity, warnings, errors, provider usage, and cleanup events</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a class="active" href="/logs">Logs</a>
+                <a href="/settings">Settings</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="log-hero">
+            <div class="log-metric">
+                <span>Files translated</span>
+                <strong>{{ summary.translated }}</strong>
+            </div>
+            <div class="log-metric">
+                <span>Tokens used</span>
+                <strong>{{ "{:,}".format(summary.tokens) }}</strong>
+            </div>
+            <div class="log-metric">
+                <span>Estimated cost</span>
+                <strong>{{ summary.estimated_cost_display }}</strong>
+            </div>
+            <div class="log-metric severity-error">
+                <span>Errors</span>
+                <strong>{{ summary.errors }}</strong>
+            </div>
+            <div class="log-metric severity-warning">
+                <span>Warnings</span>
+                <strong>{{ summary.warnings }}</strong>
+            </div>
+            <div class="log-metric">
+                <span>Skipped</span>
+                <strong>{{ summary.skipped }}</strong>
+            </div>
+        </section>
+
+        <section class="log-console">
+            <div class="log-filter-bar">
+                <div>
+                    <label for="log-search">Search logs</label>
+                    <input id="log-search" type="search" placeholder="Search message, file, job id, model, category">
+                </div>
+                <div>
+                    <label for="log-severity-filter">Severity</label>
+                    <select id="log-severity-filter">
+                        <option value="all">All severities</option>
+                        {% for severity in severities %}
+                            <option value="{{ severity }}">{{ severity }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="log-category-filter">Category</label>
+                    <select id="log-category-filter">
+                        <option value="all">All categories</option>
+                        {% for category in categories %}
+                            <option value="{{ category }}">{{ category }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <label class="toggle log-debug-toggle">
+                    <input id="log-show-quiet" type="checkbox">
+                    Show quiet details
+                </label>
+            </div>
+
+            <div class="log-toolbar">
+                <div class="log-count">
+                    <strong id="visible-log-count">{{ summary.visible_default }}</strong>
+                    <span>visible of {{ summary.total }}</span>
+                </div>
+                <div class="toolbar-actions">
+                    <a class="button secondary" href="{{ csv_url }}">Download CSV</a>
+                    <a class="button secondary" href="{{ json_url }}" target="_blank" rel="noreferrer">Raw JSON</a>
+                </div>
+            </div>
+
+            {% if logs %}
+                <div class="timeline" id="log-timeline">
+                    {% for log in logs %}
+                        <article
+                            class="log-entry severity-{{ log.severity }} {% if log.quiet %}is-quiet{% endif %}"
+                            data-severity="{{ log.severity }}"
+                            data-category="{{ log.category }}"
+                            data-quiet="{{ 'true' if log.quiet else 'false' }}"
+                            data-search="{{ log.search_text }}"
+                        >
+                            <div class="timeline-dot"></div>
+                            <div class="log-entry-main">
+                                <div class="log-entry-topline">
+                                    <div class="log-title-wrap">
+                                        <span class="status {{ log.severity }}">{{ log.severity }}</span>
+                                        <span class="pill">{{ log.category }}</span>
+                                        <h2>{{ log.title }}</h2>
+                                    </div>
+                                    <time>{{ log.time_label }}</time>
+                                </div>
+
+                                <p class="log-message">{{ log.message }}</p>
+
+                                {% if log.context %}
+                                    <div class="log-context">
+                                        {% for item in log.context %}
+                                            <span><strong>{{ item.label }}</strong>{{ item.value }}</span>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
+                                <details class="log-details">
+                                    <summary>Details</summary>
+                                    <dl>
+                                        <div><dt>Event</dt><dd><code>{{ log.event }}</code></dd></div>
+                                        <div><dt>ID</dt><dd>{{ log.id }}</dd></div>
+                                        <div><dt>Created</dt><dd>{{ log.created_at }}</dd></div>
+                                        {% if log.input_tokens or log.output_tokens or log.total_tokens %}
+                                            <div><dt>Input tokens</dt><dd>{{ log.input_tokens or 0 }}</dd></div>
+                                            <div><dt>Output tokens</dt><dd>{{ log.output_tokens or 0 }}</dd></div>
+                                            <div><dt>Total tokens</dt><dd>{{ log.total_tokens or 0 }}</dd></div>
+                                        {% endif %}
+                                        {% if log.job_id %}
+                                            <div><dt>Job</dt><dd><a href="/jobs/{{ log.job_id }}">{{ log.job_id }}</a></dd></div>
+                                        {% endif %}
+                                        {% if log.batch_id %}
+                                            <div><dt>Batch</dt><dd><a href="/batches/{{ log.batch_id }}">{{ log.batch_id }}</a></dd></div>
+                                        {% endif %}
+                                    </dl>
+                                </details>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+                <div class="empty-state" id="log-empty" hidden>No logs match the current filters.</div>
+            {% else %}
+                <div class="empty-state">No logs yet.</div>
+            {% endif %}
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const logSearch = document.getElementById("log-search");
+        const severityFilter = document.getElementById("log-severity-filter");
+        const categoryFilter = document.getElementById("log-category-filter");
+        const showQuiet = document.getElementById("log-show-quiet");
+        const visibleLogCount = document.getElementById("visible-log-count");
+        const logEmpty = document.getElementById("log-empty");
+        const logEntries = Array.from(document.querySelectorAll(".log-entry"));
+
+        function applyLogFilters() {
+            const query = (logSearch?.value || "").trim().toLowerCase();
+            const severity = severityFilter?.value || "all";
+            const category = categoryFilter?.value || "all";
+            const includeQuiet = Boolean(showQuiet?.checked);
+            let visible = 0;
+
+            for (const entry of logEntries) {
+                const matchesSearch = !query || entry.dataset.search.includes(query);
+                const matchesSeverity = severity === "all" || entry.dataset.severity === severity;
+                const matchesCategory = category === "all" || entry.dataset.category === category;
+                const matchesQuiet = includeQuiet || entry.dataset.quiet !== "true";
+                const shouldShow = matchesSearch && matchesSeverity && matchesCategory && matchesQuiet;
+
+                entry.hidden = !shouldShow;
+
+                if (shouldShow) {
+                    visible += 1;
+                }
+            }
+
+            if (visibleLogCount) {
+                visibleLogCount.textContent = visible;
+            }
+
+            if (logEmpty) {
+                logEmpty.hidden = visible !== 0;
+            }
+        }
+
+        for (const control of [logSearch, severityFilter, categoryFilter, showQuiet]) {
+            control?.addEventListener("input", applyLogFilters);
+            control?.addEventListener("change", applyLogFilters);
+        }
+
+        applyLogFilters();
+    </script>
+</body>
+</html>

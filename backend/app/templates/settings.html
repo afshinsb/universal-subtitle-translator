@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Settings</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Settings</div>
+                <div class="brand-subtitle">Loaded from your environment</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a class="active" href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="panel">
+            <h1>Runtime Settings</h1>
+            <p class="lead">Settings are currently loaded from your <code>.env</code> file.</p>
+
+            {% include "_warnings.html" %}
+
+            <h2>System Readiness</h2>
+            <div class="notice {{ 'neutral' if system_is_healthy else 'warning' }}">
+                <div class="readiness-topline">
+                    <span>System Health</span>
+                    <span class="status {{ 'done' if system_is_healthy else 'failed' }}">
+                        {{ 'Healthy' if system_is_healthy else 'Needs attention' }}
+                    </span>
+                </div>
+                <span>
+                    {{ 'System is healthy and ready to translate.' if system_is_healthy else 'System needs attention before every feature can run.' }}
+                </span>
+            </div>
+            <div class="readiness-grid">
+                {% for check in readiness %}
+                    <div class="readiness-item">
+                        <div class="readiness-topline">
+                            <span>{{ check.label }}</span>
+                            <span class="status {{ 'done' if check.ok else 'failed' }}">{{ 'Ready' if check.ok else 'Needs attention' }}</span>
+                        </div>
+                        <strong>{{ check.value }}</strong>
+                        <p>{{ check.detail }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <tbody>
+                        <tr><th>Model</th><td>{{ settings.openai_model }}</td></tr>
+                        <tr><th>Upload dir</th><td class="path">{{ settings.upload_dir }}</td></tr>
+                        <tr><th>Output dir</th><td class="path">{{ settings.output_dir }}</td></tr>
+                        <tr><th>Temp dir</th><td class="path">{{ settings.temp_dir }}</td></tr>
+                        <tr><th>Database</th><td class="path">{{ settings.database_path }}</td></tr>
+                        <tr><th>Media root</th><td class="path">{{ settings.media_root or "not restricted" }}</td></tr>
+                        <tr><th>Default source language</th><td>{{ settings.default_source_language or "Auto" }}</td></tr>
+                        <tr><th>Default target language</th><td>{{ settings.default_target_language }}</td></tr>
+                        <tr><th>Default style</th><td>{{ settings.default_style }}</td></tr>
+                        <tr><th>Batch size</th><td>{{ settings.srt_batch_size }}</td></tr>
+                        <tr><th>Max chars per batch</th><td>{{ settings.srt_max_chars }}</td></tr>
+                        <tr><th>Batch file concurrency</th><td>{{ settings.batch_file_concurrency }}</td></tr>
+                        <tr><th>Max upload size</th><td>{{ settings.max_upload_mb }} MB</td></tr>
+                        <tr><th>FFmpeg timeout</th><td>{{ settings.ffmpeg_timeout_seconds }} seconds</td></tr>
+                        <tr><th>OpenAI timeout</th><td>{{ settings.openai_timeout_seconds }} seconds</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Cleanup</h2>
+            <p class="lead">Clear recent job and batch history, then delete files only from app-managed upload, output, and temp folders.</p>
+            <div class="notice neutral">
+                <strong>External media folders are not touched.</strong>
+                <span>Subtitles saved next to your movies or original subtitle folders stay where they are.</span>
+            </div>
+
+            {% if cleanup_disabled %}
+                <div class="notice warning">
+                    <strong>Stop active jobs before cleanup</strong>
+                    <span>
+                        Active jobs: {{ cleanup_active_counts.jobs }},
+                        batches: {{ cleanup_active_counts.batches }},
+                        scans: {{ cleanup_active_counts.scans }}.
+                    </span>
+                </div>
+            {% endif %}
+            {% if cleanup_stale_counts.total %}
+                <div class="notice warning" id="stale-jobs-panel">
+                    <strong>Stale jobs found</strong>
+                    <span>
+                        Old persisted jobs: {{ cleanup_stale_counts.jobs }},
+                        batches: {{ cleanup_stale_counts.batches }}.
+                    </span>
+                </div>
+            {% endif %}
+
+            <div class="actions">
+                <button
+                    type="button"
+                    class="danger"
+                    id="cleanup-button"
+                    {% if cleanup_disabled %}disabled{% endif %}
+                >
+                    Clear History & App Files
+                </button>
+                {% if cleanup_stale_counts.total %}
+                    <button type="button" class="secondary" id="force-stale-button">
+                        Force clear stale jobs
+                    </button>
+                {% endif %}
+            </div>
+            <p class="error" id="cleanup-error"></p>
+            <div class="notice neutral" id="cleanup-result" hidden>
+                <strong>Recent jobs cleared</strong>
+                <span id="cleanup-summary"></span>
+            </div>
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const cleanupButton = document.getElementById("cleanup-button");
+        const cleanupError = document.getElementById("cleanup-error");
+        const cleanupResult = document.getElementById("cleanup-result");
+        const cleanupSummary = document.getElementById("cleanup-summary");
+        const forceStaleButton = document.getElementById("force-stale-button");
+
+        cleanupButton?.addEventListener("click", async () => {
+            cleanupError.textContent = "";
+            cleanupResult.hidden = true;
+
+            const confirmed = window.confirm(
+                "Clear recent job history and delete files inside app upload/output/temp folders?\n\n" +
+                "Files saved next to movies or subtitles in external folders will NOT be deleted."
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            cleanupButton.disabled = true;
+            cleanupButton.textContent = "Cleaning...";
+
+            try {
+                const response = await fetch("/cleanup", { method: "POST" });
+                const payload = await response.json();
+
+                if (!response.ok || payload.error) {
+                    throw new Error(payload.detail || payload.error || "Cleanup failed.");
+                }
+
+                const summary = payload.summary || {};
+                cleanupSummary.textContent =
+                    `${summary.files_deleted || 0} files deleted. ` +
+                    `${summary.bytes_freed_display || "0 bytes"} freed. ` +
+                    "External media folders were not touched.";
+                cleanupResult.hidden = false;
+                cleanupButton.textContent = "Cleanup Complete";
+                window.setTimeout(() => {
+                    window.location.reload();
+                }, 1800);
+            } catch (error) {
+                cleanupError.textContent = error.message;
+                cleanupButton.disabled = false;
+                cleanupButton.textContent = "Clear History & App Files";
+            }
+        });
+
+        forceStaleButton?.addEventListener("click", async () => {
+            cleanupError.textContent = "";
+            cleanupResult.hidden = true;
+            forceStaleButton.disabled = true;
+            forceStaleButton.textContent = "Repairing...";
+
+            try {
+                const response = await fetch("/cleanup/stale-jobs", { method: "POST" });
+                const payload = await response.json();
+
+                if (!response.ok || payload.error) {
+                    throw new Error(payload.detail || payload.error || "Could not repair stale jobs.");
+                }
+
+                const repaired = payload.repaired || {};
+                cleanupSummary.textContent =
+                    `${repaired.jobs || 0} stale jobs and ${repaired.batches || 0} stale batches marked interrupted.`;
+                cleanupResult.hidden = false;
+                forceStaleButton.textContent = "Stale Jobs Cleared";
+                window.setTimeout(() => {
+                    window.location.reload();
+                }, 1200);
+            } catch (error) {
+                cleanupError.textContent = error.message;
+                forceStaleButton.disabled = false;
+                forceStaleButton.textContent = "Force clear stale jobs";
+            }
+        });
+    </script>
+</body>
+</html>
