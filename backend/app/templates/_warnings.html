@@ -1,0 +1,10 @@
+{% if runtime_warnings %}
+    <section class="warning-stack" aria-label="Configuration warnings">
+        {% for warning in runtime_warnings %}
+            <div class="notice {{ warning.level }}">
+                <strong>{{ warning.title }}</strong>
+                <span>{{ warning.message }}</span>
+            </div>
+        {% endfor %}
+    </section>
+{% endif %}

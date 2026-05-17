@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Universal Subtitle Translator</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Subtitle Translator</div>
+                <div class="brand-subtitle">Clean subtitles for your library</div>
+            </div>
+            <nav class="nav">
+                <a class="active" href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="home-hero">
+            <div>
+                <div class="eyebrow">Subtitle Translation</div>
+                <h1>Translate subtitles without the clutter.</h1>
+                <p class="lead">Drop in an SRT or video, pick a language, and get a readable subtitle file.</p>
+            </div>
+            <a class="button secondary batch-link" href="/batches">Translate a Folder</a>
+        </section>
+
+        {% include "_warnings.html" %}
+
+        <section class="panel primary-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>New Translation</h2>
+                    <p class="hint">Files stay local. Subtitle text is sent only while translating.</p>
+                </div>
+                <span class="pill">Natural subtitle translation</span>
+            </div>
+
+            <form id="single-file-form" action="/jobs" method="post" enctype="multipart/form-data">
+                <div class="home-translate-grid">
+                    <div class="file-picker">
+                        <label>Subtitle or video file</label>
+                        <input type="file" name="file" accept=".srt,.mkv,.mp4,.avi,.mov,.m4v,.webm" required>
+                    </div>
+
+                    <div>
+                        <label>Target language</label>
+                        <select name="target_language">
+                            {% for language in languages %}
+                                <option value="{{ language }}" {% if language == default_target_language %}selected{% endif %}>{{ language }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <details class="advanced-options">
+                    <summary>Advanced</summary>
+                    <div class="advanced-grid">
+                        <label class="toggle">
+                            <input name="overwrite_existing" type="checkbox" value="true">
+                            Overwrite existing subtitle
+                        </label>
+
+                        <div>
+                            <label>Translation style</label>
+                            <select name="style">
+                                {% for style in styles %}
+                                    <option value="{{ style }}" {% if style == default_style %}selected{% endif %}>
+                                        {% if style == "natural_conversational" %}
+                                            Natural subtitle translation
+                                        {% elif style == "subtitle_friendly" %}
+                                            Subtitle friendly
+                                        {% elif style == "formal" %}
+                                            Formal
+                                        {% elif style == "literal" %}
+                                            Literal
+                                        {% else %}
+                                            {{ style }}
+                                        {% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="actions">
+                    <button
+                        type="submit"
+                        class="primary hero-action"
+                        id="single-submit"
+                        {% if not can_translate %}disabled title="Fix the setup items above before starting translation."{% endif %}
+                    >
+                        Translate
+                    </button>
+                </div>
+
+                <p class="error" id="single-file-error"></p>
+            </form>
+        </section>
+
+        <section class="recent-grid">
+            <div class="panel quiet-panel">
+                <div class="section-heading">
+                    <h2>Recent Outputs</h2>
+                </div>
+                {% if recent_outputs %}
+                    <div class="compact-list-panel">
+                        {% for output in recent_outputs[:5] %}
+                            <div class="recent-item">
+                                <div>
+                                    <strong>{{ output.name }}</strong>
+                                    <span>{{ output.source or "Translated subtitle" }}</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state compact">No translated outputs yet.</div>
+                {% endif %}
+            </div>
+
+            <div class="panel quiet-panel">
+                <div class="section-heading">
+                    <h2>Recent Jobs</h2>
+                </div>
+                {% if jobs %}
+                    <div class="compact-list-panel">
+                        {% for job in jobs[:6] %}
+                            <a class="recent-item recent-link" href="/jobs/{{ job.id }}">
+                                <div>
+                                    <strong>{{ job.input_file }}</strong>
+                                    <span>{{ job.progress_percent }}% complete</span>
+                                </div>
+                                <span class="status {{ job.status }}">{{ job.status }}</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state compact">No jobs yet.</div>
+                {% endif %}
+            </div>
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const singleFileForm = document.getElementById("single-file-form");
+        const singleSubmit = document.getElementById("single-submit");
+        const singleFileError = document.getElementById("single-file-error");
+        const singleFileInput = singleFileForm.querySelector("[name='file']");
+
+        singleFileForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            singleFileError.textContent = "";
+
+            const overwrite = singleFileForm.querySelector("[name='overwrite_existing']").checked;
+
+            if (overwrite && !window.confirm("Overwrite existing target subtitles if they are found?")) {
+                return;
+            }
+
+            singleSubmit.disabled = true;
+            singleSubmit.textContent = "Uploading...";
+
+            try {
+                const response = await fetch("/jobs", {
+                    method: "POST",
+                    body: new FormData(singleFileForm),
+                    redirect: "follow",
+                });
+
+                singleSubmit.textContent = "Starting job...";
+
+                if (!response.ok) {
+                    let message = "Could not start translation.";
+
+                    try {
+                        const payload = await response.json();
+                        message = payload.detail || payload.error || message;
+                    } catch (error) {
+                        message = await response.text() || message;
+                    }
+
+                    throw new Error(message);
+                }
+
+                window.location.href = response.url || "/jobs";
+            } catch (error) {
+                singleFileError.textContent = error.message;
+                singleSubmit.disabled = false;
+                singleSubmit.textContent = "Translate";
+            }
+        });
+
+        singleFileInput.addEventListener("change", () => {
+            singleFileError.textContent = "";
+        });
+    </script>
+</body>
+</html>

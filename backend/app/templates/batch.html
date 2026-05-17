@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Batch Progress</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Batch Progress</div>
+                <div class="brand-subtitle">{{ batch.folder_path }}</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a class="active" href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a href="/logs">Logs</a>
+                <a href="/batches/{{ batch.id }}/events">Events</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="panel">
+            <div class="meta">
+                <div class="metric">
+                    <span>Status</span>
+                    <strong id="status">{{ batch.status }}</strong>
+                </div>
+                <div class="metric">
+                    <span>Files</span>
+                    <strong id="file-progress">0 / {{ batch.total_files }}</strong>
+                </div>
+                <div class="metric">
+                    <span>Subtitles</span>
+                    <strong id="subtitle-progress">0 / 0</strong>
+                </div>
+                <div class="metric">
+                    <span>Failed</span>
+                    <strong id="failed-files">{{ batch.failed_files }}</strong>
+                </div>
+                <div class="metric">
+                    <span>Skipped</span>
+                    <strong id="skipped-files">0</strong>
+                </div>
+            </div>
+
+            <div class="progress-track total-track">
+                <div class="progress-fill" id="total-bar">0%</div>
+            </div>
+
+            <p class="muted" id="message">{{ batch.message }}</p>
+            <div class="toolbar">
+                <button type="button" class="secondary" id="copy-logs-button">Copy logs</button>
+                <a class="button secondary" href="/batches/{{ batch.id }}/logs.csv">Download logs</a>
+                <button type="button" class="danger" id="cancel-button">Cancel Batch</button>
+            </div>
+        </section>
+
+        <section class="panel" id="completion-panel" hidden>
+            <h2>Batch Summary</h2>
+            <div class="summary">
+                <span class="pill status done" id="summary-done">0 done</span>
+                <span class="pill status failed" id="summary-failed">0 failed</span>
+                <span class="pill status skipped" id="summary-skipped">0 skipped</span>
+            </div>
+            <p class="muted" id="completion-message">Batch completed.</p>
+            <div class="actions">
+                <a class="button secondary" href="/logs">View logs</a>
+                <a class="button primary" href="/batches/{{ batch.id }}/report.csv">Download report</a>
+                <a class="button secondary" href="/batches/{{ batch.id }}/report.json" target="_blank" rel="noreferrer">Output info</a>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Active Files</h2>
+            <div id="active-files">
+                <div class="empty-state">Waiting for active files...</div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>All Files</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Status</th>
+                            <th>Step</th>
+                            <th>Subtitles</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table"></tbody>
+                </table>
+            </div>
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const batchId = "{{ batch.id }}";
+        const statusEl = document.getElementById("status");
+        const fileProgressEl = document.getElementById("file-progress");
+        const subtitleProgressEl = document.getElementById("subtitle-progress");
+        const failedFilesEl = document.getElementById("failed-files");
+        const skippedFilesEl = document.getElementById("skipped-files");
+        const messageEl = document.getElementById("message");
+        const totalBar = document.getElementById("total-bar");
+        const activeFilesEl = document.getElementById("active-files");
+        const jobsTable = document.getElementById("jobs-table");
+        const cancelButton = document.getElementById("cancel-button");
+        const copyLogsButton = document.getElementById("copy-logs-button");
+        const completionPanel = document.getElementById("completion-panel");
+        const completionMessage = document.getElementById("completion-message");
+        const summaryDone = document.getElementById("summary-done");
+        const summaryFailed = document.getElementById("summary-failed");
+        const summarySkipped = document.getElementById("summary-skipped");
+
+        function percent(job) {
+            return Number(job.progress_percent || 0);
+        }
+
+        function setBar(element, value) {
+            const cleanValue = Math.max(0, Math.min(100, Number(value || 0)));
+            element.style.width = `${cleanValue}%`;
+            element.textContent = `${cleanValue}%`;
+        }
+
+        function renderActive(jobs) {
+            activeFilesEl.innerHTML = "";
+
+            if (!jobs.length) {
+                const empty = document.createElement("div");
+                empty.className = "empty-state";
+                empty.textContent = "No active files right now.";
+                activeFilesEl.appendChild(empty);
+                return;
+            }
+
+            for (const job of jobs) {
+                const row = document.createElement("div");
+                row.className = "file-row";
+
+                const title = document.createElement("div");
+                const fileName = document.createElement("div");
+                const fileSubtext = document.createElement("div");
+                fileName.className = "file-name";
+                fileSubtext.className = "file-subtext";
+                fileName.textContent = job.input_file || "-";
+                fileSubtext.textContent =
+                    `${job.message || "-"} | ${job.translated_count || 0} / ${job.total_subtitles || 0}`;
+                title.appendChild(fileName);
+                title.appendChild(fileSubtext);
+
+                const status = document.createElement("div");
+                status.className = `status ${job.status || ""}`;
+                status.textContent = job.status || "-";
+
+                const progress = document.createElement("div");
+                progress.className = "progress-track small-track";
+                const fill = document.createElement("div");
+                fill.className = "progress-fill";
+                progress.appendChild(fill);
+                setBar(fill, percent(job));
+
+                row.appendChild(title);
+                row.appendChild(status);
+                row.appendChild(progress);
+                activeFilesEl.appendChild(row);
+            }
+        }
+
+        function renderJobs(jobs) {
+            jobsTable.innerHTML = "";
+
+            if (!jobs.length) {
+                const row = document.createElement("tr");
+                const cell = document.createElement("td");
+                const empty = document.createElement("div");
+                cell.colSpan = 5;
+                empty.className = "empty-state";
+                empty.textContent = "Waiting for files...";
+                cell.appendChild(empty);
+                row.appendChild(cell);
+                jobsTable.appendChild(row);
+                return;
+            }
+
+            for (const job of jobs) {
+                const row = document.createElement("tr");
+                const file = document.createElement("td");
+                const status = document.createElement("td");
+                const progress = document.createElement("td");
+                const step = document.createElement("td");
+                const subtitles = document.createElement("td");
+                const statusBadge = document.createElement("span");
+
+                file.className = "path";
+                file.textContent = job.input_file || "-";
+                statusBadge.className = `status ${job.status || ""}`;
+                statusBadge.textContent = job.status || "-";
+                status.appendChild(statusBadge);
+                step.textContent = job.message || "-";
+                progress.textContent = `${percent(job)}%`;
+                subtitles.textContent = `${job.translated_count || 0} / ${job.total_subtitles || 0}`;
+
+                row.appendChild(file);
+                row.appendChild(status);
+                row.appendChild(step);
+                row.appendChild(subtitles);
+                row.appendChild(progress);
+                jobsTable.appendChild(row);
+            }
+        }
+
+        function render(payload) {
+            if (payload.error) {
+                messageEl.textContent = payload.error;
+                return;
+            }
+
+            const batch = payload.batch || {};
+            const completed = Number(batch.completed_files || 0);
+            const failed = Number(batch.failed_files || 0);
+            const skipped = Number(batch.skipped_files || 0);
+
+            statusEl.textContent = batch.status || "-";
+            fileProgressEl.textContent = `${completed + failed + skipped} / ${batch.total_files || 0}`;
+            subtitleProgressEl.textContent = `${payload.translated_count || 0} / ${payload.total_subtitles || 0}`;
+            failedFilesEl.textContent = failed;
+            skippedFilesEl.textContent = skipped;
+            messageEl.textContent = batch.message || "-";
+            completionPanel.hidden = !isTerminal(batch.status);
+            completionMessage.textContent = batch.message || "Batch completed.";
+            summaryDone.textContent = `${completed} done`;
+            summaryFailed.textContent = `${failed} failed`;
+            summarySkipped.textContent = `${skipped} skipped/canceled`;
+            cancelButton.hidden = ["done", "failed", "cancelled", "interrupted"].includes(batch.status);
+            cancelButton.disabled = batch.status === "cancel_requested";
+            cancelButton.textContent = batch.status === "cancel_requested" ? "Canceling..." : "Cancel Batch";
+            setBar(totalBar, payload.progress_percent || 0);
+
+            renderActive(payload.active_jobs || []);
+            renderJobs(payload.jobs || []);
+        }
+
+        let fallbackPollTimer = null;
+        let events = new EventSource(`/batches/${batchId}/events`);
+
+        function isTerminal(status) {
+            return status === "done" || status === "failed" || status === "cancelled" || status === "interrupted";
+        }
+
+        async function pollStatus() {
+            try {
+                const response = await fetch(`/batches/${batchId}/status`);
+                const payload = await response.json();
+                render(payload);
+
+                const status = payload.batch && payload.batch.status;
+
+                if (!isTerminal(status)) {
+                    fallbackPollTimer = setTimeout(pollStatus, 1500);
+                }
+            } catch (error) {
+                messageEl.textContent = "Live updates paused. Retrying status check...";
+                fallbackPollTimer = setTimeout(pollStatus, 2500);
+            }
+        }
+
+        events.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            render(payload);
+
+            const status = payload.batch && payload.batch.status;
+
+            if (isTerminal(status)) {
+                events.close();
+            }
+        };
+        events.onerror = () => {
+            events.close();
+
+            if (!fallbackPollTimer) {
+                messageEl.textContent = "Live event stream interrupted. Falling back to polling...";
+                pollStatus();
+            }
+        };
+
+        cancelButton.addEventListener("click", async () => {
+            cancelButton.disabled = true;
+            cancelButton.textContent = "Canceling...";
+
+            await fetch(`/batches/${batchId}/cancel`, { method: "POST" });
+        });
+
+        copyLogsButton.addEventListener("click", async () => {
+            await window.UST.copyLogs(`/batches/${batchId}/logs.json`, copyLogsButton);
+        });
+    </script>
+</body>
+</html>

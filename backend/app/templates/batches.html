@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Batch Subtitle Translation</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Batch Translation</div>
+                <div class="brand-subtitle">Translate a folder of movies or shows</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a class="active" href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="page-header">
+            <div class="eyebrow">Folder Translation</div>
+            <h1>Translate a media folder</h1>
+            <p class="lead">Scan a folder, preview subtitles, then translate everything in one run.</p>
+        </section>
+
+        {% include "_warnings.html" %}
+
+        <section class="panel">
+            <form id="batch-form">
+                <div class="batch-translate-grid">
+                    <div>
+                        <label for="folder_path">Root folder</label>
+                        <div class="folder-path-control">
+                            <input id="folder_path" name="folder_path" type="text" placeholder="C:\Media\TV Show" required>
+                            <button type="button" class="secondary" id="pick-folder-button">Browse</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="target_language">Target language</label>
+                        <select id="target_language" name="target_language">
+                            {% for language in languages %}
+                                <option value="{{ language }}" {% if language == default_target_language %}selected{% endif %}>{{ language }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <details class="advanced-options">
+                    <summary>Advanced</summary>
+                    <div class="advanced-grid batch-advanced-grid">
+                        <label class="toggle">
+                            <input id="overwrite_existing" name="overwrite_existing" type="checkbox" value="true">
+                            Overwrite existing translations
+                        </label>
+
+                        <div>
+                            <label for="max_concurrency">Max concurrency</label>
+                            <input id="max_concurrency" name="max_concurrency" type="number" min="1" max="10" value="{{ default_concurrency }}">
+                        </div>
+
+                        <div>
+                            <label for="style">Translation style</label>
+                            <select id="style" name="style">
+                                {% for style in styles %}
+                                    <option value="{{ style }}" {% if style == default_style %}selected{% endif %}>
+                                        {% if style == "natural_conversational" %}
+                                            Natural subtitle translation
+                                        {% elif style == "subtitle_friendly" %}
+                                            Subtitle friendly
+                                        {% elif style == "formal" %}
+                                            Formal
+                                        {% elif style == "literal" %}
+                                            Literal
+                                        {% else %}
+                                            {{ style }}
+                                        {% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="actions">
+                    <button type="button" class="primary scan-button" id="scan-button">
+                        <span class="button-progress" id="scan-button-progress"></span>
+                        <span class="button-label" id="scan-button-label">Scan Folder</span>
+                    </button>
+                    <button type="button" class="danger" id="cancel-scan-button" hidden>Cancel Scan</button>
+                    <button type="submit" class="secondary" id="start-button" disabled>Start Batch Translation</button>
+                </div>
+            </form>
+
+            <p class="error" id="scan-error"></p>
+        </section>
+
+        <section class="panel" id="scan-results" hidden>
+            <h2>Scan Results</h2>
+            <div class="summary">
+                <span class="pill" id="file-count">0 files to process</span>
+                <span class="pill" id="skipped-count">0 skipped</span>
+                <span class="pill" id="subtitle-count">0 subtitles</span>
+                <span class="pill">Concurrency: {{ default_concurrency }} files</span>
+            </div>
+
+            <div class="empty-state" id="scan-empty" hidden>
+                <strong>No files are ready to translate.</strong>
+                <ul class="compact-list">
+                    <li>The folder may not contain supported video files.</li>
+                    <li>Selected target subtitles may already exist.</li>
+                    <li>Videos may not have readable subtitle tracks.</li>
+                </ul>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Video</th>
+                            <th>Subfolder</th>
+                            <th>Source</th>
+                            <th>Step</th>
+                            <th>Subtitles</th>
+                            <th>Output</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scan-table"></tbody>
+                </table>
+            </div>
+
+            <div id="skipped-section" hidden>
+                <h2>Skipped</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Video</th>
+                                <th>Subfolder</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skipped-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Recent Batches</h2>
+            {% if batches %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Folder</th>
+                                <th>Status</th>
+                                <th>Files</th>
+                                <th>Open</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for batch in batches %}
+                                <tr>
+                                    <td class="path">{{ batch.folder_path }}</td>
+                                    <td>
+                                        {% if batch.status == "failed" and batch.completed_files > 0 %}
+                                            <span class="status partial">partial</span>
+                                        {% else %}
+                                            <span class="status {{ batch.status }}">{{ batch.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ batch.completed_files }} done
+                                        {% if batch.failed_files > 0 %}, {{ batch.failed_files }} failed{% endif %}
+                                        / {{ batch.total_files }}
+                                    </td>
+                                    <td><a class="button" href="/batches/{{ batch.id }}">View</a></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">No batches yet.</div>
+            {% endif %}
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const form = document.getElementById("batch-form");
+        const folderPathInput = document.getElementById("folder_path");
+        const targetLanguageInput = document.getElementById("target_language");
+        const overwriteInput = document.getElementById("overwrite_existing");
+        const pickFolderButton = document.getElementById("pick-folder-button");
+        const scanButton = document.getElementById("scan-button");
+        const cancelScanButton = document.getElementById("cancel-scan-button");
+        const scanButtonLabel = document.getElementById("scan-button-label");
+        const scanButtonProgress = document.getElementById("scan-button-progress");
+        const startButton = document.getElementById("start-button");
+        const errorBox = document.getElementById("scan-error");
+        const results = document.getElementById("scan-results");
+        const scanTable = document.getElementById("scan-table");
+        const skippedTable = document.getElementById("skipped-table");
+        const skippedSection = document.getElementById("skipped-section");
+        const scanEmpty = document.getElementById("scan-empty");
+        const fileCount = document.getElementById("file-count");
+        const skippedCount = document.getElementById("skipped-count");
+        const subtitleCount = document.getElementById("subtitle-count");
+        let scanPollTimer = null;
+        let currentScanId = null;
+        const canTranslate = {{ "true" if can_translate else "false" }};
+
+        function setBusy(isBusy, label = "Scan Folder") {
+            scanButton.disabled = isBusy;
+            cancelScanButton.hidden = !isBusy;
+            cancelScanButton.disabled = false;
+            cancelScanButton.textContent = "Cancel Scan";
+            startButton.disabled = isBusy || !canTranslate || startButton.dataset.ready !== "true";
+            scanButton.classList.toggle("is-scanning", isBusy);
+            scanButtonLabel.textContent = label;
+            scanButtonProgress.style.width = isBusy ? "45%" : "0%";
+        }
+
+        function resetScanPreview() {
+            errorBox.textContent = "";
+            scanTable.innerHTML = "";
+            skippedTable.innerHTML = "";
+            skippedSection.hidden = true;
+            scanEmpty.hidden = true;
+            results.hidden = true;
+            startButton.dataset.ready = "false";
+            startButton.disabled = true;
+        }
+
+        function markScanInputsChanged() {
+            if (startButton.dataset.ready === "true") {
+                resetScanPreview();
+            }
+        }
+
+        function updateScanProgress(progress = {}) {
+            const filesChecked = Number(progress.files_checked || 0);
+            const foldersScanned = Number(progress.folders_scanned || 0);
+            const candidates = Number(progress.candidate_files_found || 0);
+            const currentPath = progress.current_path || "";
+            const label = filesChecked
+                ? `Scanning... ${filesChecked} files checked`
+                : `Scanning... ${foldersScanned} folders`;
+
+            setBusy(true, label);
+            scanButton.title = [
+                `${foldersScanned} folders scanned`,
+                `${filesChecked} files checked`,
+                `${candidates} video candidates found`,
+                currentPath ? `Current: ${currentPath}` : "",
+            ].filter(Boolean).join("\n");
+        }
+
+        function renderScanResults(payload) {
+            fileCount.textContent = `${payload.total_files} files to process`;
+            skippedCount.textContent = `${payload.skipped_files || 0} skipped`;
+            subtitleCount.textContent = `${payload.total_subtitles} subtitles`;
+
+            for (const file of payload.files) {
+                const row = document.createElement("tr");
+                const videoCell = document.createElement("td");
+                const folderCell = document.createElement("td");
+                const sourceCell = document.createElement("td");
+                const sourceMain = document.createElement("div");
+                const sourceReason = document.createElement("div");
+                const stepCell = document.createElement("td");
+                const countCell = document.createElement("td");
+                const outputCell = document.createElement("td");
+
+                videoCell.className = "path";
+                folderCell.className = "path";
+                outputCell.className = "path";
+                sourceReason.className = "file-subtext";
+                videoCell.textContent = file.relative_path;
+                folderCell.textContent = file.subfolder || ".";
+                sourceMain.textContent = `${file.source_kind} ${file.source_language || ""}`.trim();
+                sourceReason.textContent = file.source_selection_reason || "Selected by automatic language priority";
+                sourceCell.appendChild(sourceMain);
+                sourceCell.appendChild(sourceReason);
+                stepCell.textContent = file.step;
+                countCell.textContent = file.total_subtitles;
+                outputCell.textContent = file.output_name;
+
+                row.appendChild(videoCell);
+                row.appendChild(folderCell);
+                row.appendChild(sourceCell);
+                row.appendChild(stepCell);
+                row.appendChild(countCell);
+                row.appendChild(outputCell);
+                scanTable.appendChild(row);
+            }
+
+            for (const file of payload.skipped || []) {
+                const row = document.createElement("tr");
+                const videoCell = document.createElement("td");
+                const folderCell = document.createElement("td");
+                const reasonCell = document.createElement("td");
+
+                videoCell.className = "path";
+                folderCell.className = "path";
+                reasonCell.className = "path";
+                videoCell.textContent = file.relative_path;
+                folderCell.textContent = file.subfolder || ".";
+                reasonCell.textContent = file.reason || "No external or embedded subtitle found.";
+
+                row.appendChild(videoCell);
+                row.appendChild(folderCell);
+                row.appendChild(reasonCell);
+                skippedTable.appendChild(row);
+            }
+
+            skippedSection.hidden = !payload.skipped || payload.skipped.length === 0;
+            scanEmpty.hidden = payload.total_files > 0;
+            results.hidden = false;
+            startButton.dataset.ready = payload.total_files > 0 ? "true" : "false";
+            startButton.disabled = payload.total_files === 0 || !canTranslate;
+        }
+
+        async function pollScan(scanId) {
+            const response = await fetch(`/batches/scan/${scanId}`);
+            const payload = await response.json();
+
+            if (!response.ok || payload.error) {
+                throw new Error(payload.error || "Scan failed.");
+            }
+
+            if (payload.status === "failed") {
+                throw new Error(payload.error || "Scan failed.");
+            }
+
+            updateScanProgress(payload.progress);
+
+            if (payload.status === "cancel_requested") {
+                setBusy(true, "Canceling scan...");
+                cancelScanButton.disabled = true;
+                cancelScanButton.textContent = "Canceling...";
+            }
+
+            if (payload.status === "cancelled") {
+                errorBox.textContent = "Scan canceled.";
+                setBusy(false);
+                scanButton.title = "";
+                currentScanId = null;
+                return;
+            }
+
+            if (payload.status === "done") {
+                scanButtonProgress.style.width = "100%";
+                renderScanResults(payload.result);
+                setBusy(false);
+                scanButton.title = "";
+                currentScanId = null;
+                return;
+            }
+
+            scanPollTimer = window.setTimeout(() => {
+                pollScan(scanId).catch((error) => {
+                    errorBox.textContent = error.message;
+                    setBusy(false);
+                    scanButton.title = "";
+                });
+            }, 600);
+        }
+
+        scanButton.addEventListener("click", async () => {
+            if (scanPollTimer) {
+                window.clearTimeout(scanPollTimer);
+            }
+
+            const overwrite = form.querySelector("[name='overwrite_existing']").checked;
+
+            if (overwrite && !window.confirm("Scan with overwrite enabled? Existing target subtitles may be replaced when the batch starts.")) {
+                return;
+            }
+
+            resetScanPreview();
+
+            try {
+                setBusy(true, "Scanning...");
+                const response = await fetch("/batches/scan", {
+                    method: "POST",
+                    body: new FormData(form),
+                });
+                const payload = await response.json();
+
+                if (!response.ok || payload.error) {
+                    throw new Error(payload.error || "Scan failed.");
+                }
+
+                currentScanId = payload.scan_id;
+                await pollScan(payload.scan_id);
+            } catch (error) {
+                errorBox.textContent = error.message;
+                setBusy(false);
+                scanButton.title = "";
+                currentScanId = null;
+            }
+        });
+
+        pickFolderButton.addEventListener("click", async () => {
+            errorBox.textContent = "";
+            pickFolderButton.disabled = true;
+            pickFolderButton.textContent = "Opening...";
+
+            try {
+                const response = await fetch("/batches/pick-folder", { method: "POST" });
+                const payload = await response.json();
+
+                if (!response.ok || payload.error) {
+                    throw new Error(payload.error || "Could not pick a folder.");
+                }
+
+                if (payload.folder_path) {
+                    folderPathInput.value = payload.folder_path;
+                    resetScanPreview();
+                    folderPathInput.focus();
+                }
+            } catch (error) {
+                errorBox.textContent = error.message;
+            } finally {
+                pickFolderButton.disabled = false;
+                pickFolderButton.textContent = "Browse";
+            }
+        });
+
+        cancelScanButton.addEventListener("click", async () => {
+            if (!currentScanId) {
+                return;
+            }
+
+            cancelScanButton.disabled = true;
+            cancelScanButton.textContent = "Canceling...";
+            scanButtonLabel.textContent = "Canceling scan...";
+
+            await fetch(`/batches/scan/${currentScanId}/cancel`, { method: "POST" });
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            errorBox.textContent = "";
+
+            const overwrite = form.querySelector("[name='overwrite_existing']").checked;
+
+            if (overwrite && !window.confirm("Start this batch with overwrite enabled? Existing target subtitles may be replaced.")) {
+                return;
+            }
+
+            startButton.disabled = true;
+            startButton.textContent = "Starting...";
+
+            try {
+                const response = await fetch("/batches", {
+                    method: "POST",
+                    body: new FormData(form),
+                    redirect: "follow",
+                });
+
+                if (!response.ok) {
+                    let message = "Could not start batch.";
+
+                    try {
+                        const payload = await response.json();
+                        message = payload.detail || payload.error || message;
+                    } catch (error) {
+                        message = await response.text() || message;
+                    }
+
+                    throw new Error(message);
+                }
+
+                window.location.href = response.url || "/batches";
+            } catch (error) {
+                errorBox.textContent = error.message;
+                startButton.disabled = startButton.dataset.ready !== "true";
+                startButton.textContent = "Start Batch Translation";
+            }
+        });
+
+        folderPathInput.addEventListener("input", markScanInputsChanged);
+        targetLanguageInput.addEventListener("change", markScanInputsChanged);
+        overwriteInput.addEventListener("change", markScanInputsChanged);
+    </script>
+</body>
+</html>

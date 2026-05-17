@@ -1,0 +1,43 @@
+services:
+  backend:
+    build: ./backend
+    container_name: subtitle-translator-backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 2288
+      APP_VERSION: ${APP_VERSION:-1.2.0}
+      DATA_DIR: /app/data
+      UPLOAD_DIR: /app/data/uploads
+      OUTPUT_DIR: /app/data/outputs
+      TEMP_DIR: /app/data/temp
+      DATABASE_PATH: /app/data/app.db
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "2288"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2288/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: subtitle-translator-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HOST_PORT:-2288}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

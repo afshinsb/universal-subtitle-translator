@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>About Universal Subtitle Translator</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">About</div>
+                <div class="brand-subtitle">Universal Subtitle Translator</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a class="active" href="/about">About</a>
+                <a href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="page-header">
+            <div class="eyebrow">Open Source Subtitle Automation</div>
+            <h1>Translate subtitles without losing your media workflow.</h1>
+            <p class="lead">Universal Subtitle Translator is a full-stack subtitle automation tool that can translate SRT files, scan folders recursively, detect video files, extract embedded subtitles with FFmpeg, and save translated subtitles next to the original media.</p>
+        </section>
+
+        <section class="panel">
+            <h2>Key Features</h2>
+            <div class="feature-grid">
+                <div class="feature-item">
+                    <h3>Single-file translation</h3>
+                    <p>Upload an SRT or video file, detect the best source subtitle, and generate a target-language SRT with consistent naming.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Recursive batch mode</h3>
+                    <p>Scan media folders, skip existing target subtitles, preview candidates, and process multiple files with controlled concurrency.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Smart subtitle selection</h3>
+                    <p>Prefer external subtitles first, then embedded text tracks, with English, French, common languages, and unknown subtitles ranked automatically.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>FFmpeg integration</h3>
+                    <p>Use ffprobe to inspect subtitle streams and FFmpeg to extract embedded subtitle tracks before translation.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Supported Inputs</h2>
+            <div class="summary">
+                <span class="pill">.srt subtitles</span>
+                {% for extension in video_extensions %}
+                    <span class="pill">{{ extension }} video</span>
+                {% endfor %}
+            </div>
+
+            <h2>Translation Provider</h2>
+            <div class="summary">
+                {% for provider in translation_providers %}
+                    <span class="pill">{{ provider }}</span>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Privacy</h2>
+            <p class="lead">Files are processed locally by the application. When translation runs, subtitle text may be sent to the selected translation provider, currently OpenAI, according to the provider configuration you supply.</p>
+
+            <div class="about-meta">
+                <div>
+                    <span>License</span>
+                    <strong>MIT</strong>
+                </div>
+                <div>
+                    <span>Author</span>
+                    <strong>Afshin Saberi</strong>
+                </div>
+                <div>
+                    <span>Support</span>
+                    <strong><a href="{{ project_footer.issue_url }}" target="_blank" rel="noreferrer">GitHub issues</a></strong>
+                </div>
+            </div>
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+</body>
+</html>

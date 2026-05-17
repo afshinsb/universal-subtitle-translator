@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Translation Job</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Translation Progress</div>
+                <div class="brand-subtitle">{{ job.input_file }}</div>
+            </div>
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a href="/about">About</a>
+                <a href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                <a href="/jobs/{{ job.id }}/logs">This Job Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+            </nav>
+        </header>
+
+        <section class="panel">
+            <div class="meta">
+                <div class="metric">
+                    <span>Status</span>
+                    <strong id="status">{{ job.status }}</strong>
+                </div>
+                <div class="metric">
+                    <span>Progress</span>
+                    <strong id="progress-text">{{ job.translated_count }} / {{ job.total_subtitles }}</strong>
+                </div>
+                <div class="metric">
+                    <span>Language</span>
+                    <strong id="language">{{ job.source_language }} &rarr; {{ job.target_language }}</strong>
+                </div>
+            </div>
+
+            <p class="muted"><strong>Input:</strong> <span id="input-file">{{ job.input_file }}</span></p>
+            <p class="muted"><strong>Output:</strong> <span id="output-file">{{ job.output_file or "-" }}</span></p>
+            <p class="muted"><strong>Message:</strong> <span id="message">{{ job.message }}</span></p>
+            <p class="muted"><strong>Model:</strong> <span id="model">{{ job.model }}</span></p>
+
+            <div class="actions">
+                <button type="button" class="secondary" id="copy-logs-button">Copy logs</button>
+                <a class="button secondary" href="/jobs/{{ job.id }}/logs.csv">Download logs</a>
+            </div>
+
+            <div class="progress-wrapper">
+                <div class="progress-bar" id="progress-bar">{{ job.progress_percent }}%</div>
+            </div>
+
+            <p id="error" class="error"></p>
+            <div class="notice neutral" id="skipped-panel" hidden>
+                <strong>Skipped</strong>
+                <span id="skipped-message">This job did not need translation.</span>
+            </div>
+            <div id="download-area" class="actions"></div>
+            <div class="toolbar">
+                <button type="button" class="danger" id="cancel-button">Cancel Job</button>
+            </div>
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+
+    <script>
+        const jobId = "{{ job.id }}";
+        const cancelButton = document.getElementById("cancel-button");
+        const copyLogsButton = document.getElementById("copy-logs-button");
+        const skippedPanel = document.getElementById("skipped-panel");
+        const skippedMessage = document.getElementById("skipped-message");
+
+        function isTerminalStatus(status) {
+            return ["done", "failed", "cancelled", "skipped", "interrupted"].includes(status);
+        }
+
+        async function updateStatus() {
+            const response = await fetch(`/jobs/${jobId}/status`);
+            const data = await response.json();
+
+            if (data.detail && !data.id) {
+                document.getElementById("error").textContent = data.detail;
+                return;
+            }
+
+            document.getElementById("input-file").textContent = data.input_file || "-";
+            document.getElementById("output-file").textContent = data.output_file || "-";
+            document.getElementById("status").textContent = data.status || "-";
+            document.getElementById("message").textContent = data.message || "-";
+            document.getElementById("language").textContent = `${data.source_language || "Detecting"} -> ${data.target_language || "-"}`;
+            document.getElementById("model").textContent = data.model || "-";
+            cancelButton.hidden = isTerminalStatus(data.status);
+            cancelButton.disabled = data.status === "cancel_requested";
+            cancelButton.textContent = data.status === "cancel_requested" ? "Canceling..." : "Cancel Job";
+            skippedPanel.hidden = data.status !== "skipped";
+            skippedMessage.textContent = data.message || "This job did not need translation.";
+
+            document.getElementById("progress-text").textContent =
+                `${data.translated_count || 0} / ${data.total_subtitles || 0}`;
+
+            const percent = data.progress_percent || 0;
+            const bar = document.getElementById("progress-bar");
+            bar.style.width = `${percent}%`;
+            bar.textContent = `${percent}%`;
+
+            if (data.status === "failed") {
+                document.getElementById("error").textContent = data.error || "Unknown error.";
+                return;
+            }
+
+            if (data.status === "skipped" || data.status === "cancelled" || data.status === "interrupted") {
+                document.getElementById("download-area").innerHTML = "";
+                return;
+            }
+
+            if (data.status === "done") {
+                const downloadArea = document.getElementById("download-area");
+                downloadArea.innerHTML = "";
+                const link = document.createElement("a");
+                link.className = "button primary";
+                link.href = `/jobs/${jobId}/download`;
+                link.textContent = "Download translated subtitle";
+                downloadArea.appendChild(link);
+                return;
+            }
+
+            setTimeout(updateStatus, 1000);
+        }
+
+        cancelButton.addEventListener("click", async () => {
+            if (!window.confirm("Cancel this job? Completed output files will not be deleted.")) {
+                return;
+            }
+
+            cancelButton.disabled = true;
+            cancelButton.textContent = "Canceling...";
+
+            await fetch(`/jobs/${jobId}/cancel`, { method: "POST" });
+            setTimeout(updateStatus, 500);
+        });
+
+        copyLogsButton.addEventListener("click", async () => {
+            await window.UST.copyLogs(`/jobs/${jobId}/logs.json`, copyLogsButton);
+        });
+
+        updateStatus();
+    </script>
+</body>
+</html>
