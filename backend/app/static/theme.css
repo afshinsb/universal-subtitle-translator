@@ -124,6 +124,28 @@ button:hover {
     white-space: nowrap;
 }
 
+.session-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+    color: var(--muted);
+    padding: 7px 11px;
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.nav-logout-form {
+    margin: 0;
+}
+
+.nav-logout-button {
+    min-height: 38px;
+}
+
 .page-header {
     margin-bottom: 18px;
 }
@@ -190,6 +212,20 @@ h2 {
 
 .primary-panel {
     padding: 28px;
+}
+
+.auth-shell {
+    justify-content: center;
+    max-width: 560px;
+}
+
+.auth-panel {
+    width: 100%;
+}
+
+.login-grid {
+    display: grid;
+    gap: 14px;
 }
 
 .quiet-panel {

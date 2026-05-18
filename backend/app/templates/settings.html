@@ -19,6 +19,7 @@
                 <a class="active" href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
                 <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                {% include "_auth_nav.html" %}
             </nav>
         </header>
 
@@ -153,7 +154,7 @@
             cleanupButton.textContent = "Cleaning...";
 
             try {
-                const response = await fetch("/cleanup", { method: "POST" });
+                const response = await window.UST.authFetch("/cleanup", { method: "POST" });
                 const payload = await response.json();
 
                 if (!response.ok || payload.error) {
@@ -184,7 +185,7 @@
             forceStaleButton.textContent = "Repairing...";
 
             try {
-                const response = await fetch("/cleanup/stale-jobs", { method: "POST" });
+                const response = await window.UST.authFetch("/cleanup/stale-jobs", { method: "POST" });
                 const payload = await response.json();
 
                 if (!response.ok || payload.error) {

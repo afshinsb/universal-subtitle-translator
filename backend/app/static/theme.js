@@ -13,8 +13,28 @@
         }
     }
 
-    async function fetchJson(url, options) {
+    function loginUrl() {
+        const next = `${window.location.pathname}${window.location.search}`;
+        return `/login?next=${encodeURIComponent(next)}`;
+    }
+
+    function handleAuthExpired(response) {
+        if (response && response.status === 401) {
+            window.location.href = loginUrl();
+            return true;
+        }
+
+        return false;
+    }
+
+    async function authFetch(url, options) {
         const response = await fetch(url, options);
+        handleAuthExpired(response);
+        return response;
+    }
+
+    async function fetchJson(url, options) {
+        const response = await authFetch(url, options);
         const payload = await response.json();
 
         if (!response.ok || payload.error) {
@@ -43,7 +63,9 @@
 
     window.UST = {
         copyLogs,
+        authFetch,
         fetchJson,
+        handleAuthExpired,
         setTemporaryButtonText,
     };
 
@@ -57,5 +79,6 @@
                 applyTheme(root.dataset.theme === "dark" ? "light" : "dark");
             });
         }
+
     });
 })();

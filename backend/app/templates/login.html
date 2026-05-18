@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Login</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell auth-shell">
+        <section class="panel auth-panel">
+            <div class="panel-heading">
+                <div>
+                    <div class="eyebrow">Admin Login</div>
+                    <h1>{{ project_footer.name }}</h1>
+                    <p class="hint">Sign in to access the translator.</p>
+                </div>
+            </div>
+
+            {% if error %}
+                <div class="notice error">
+                    <strong>{{ error }}</strong>
+                    <span>Check your `.env` configuration if this keeps happening.</span>
+                </div>
+            {% endif %}
+
+            {% if setup_errors %}
+                <div class="warning-stack" aria-label="Authentication setup warnings">
+                    {% for issue in setup_errors %}
+                        <div class="notice error">
+                            <strong>{{ issue.message }}</strong>
+                            <span>{{ issue.fix }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form method="post" action="/login">
+                <input type="hidden" name="next" value="{{ next_url }}">
+
+                <div class="login-grid">
+                    <div>
+                        <label for="username">Username</label>
+                        <input id="username" name="username" type="text" autocomplete="username" required autofocus>
+                    </div>
+
+                    <div>
+                        <label for="password">Password</label>
+                        <input id="password" name="password" type="password" autocomplete="current-password" required>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" class="primary hero-action" {% if setup_errors %}disabled{% endif %}>Login</button>
+                </div>
+            </form>
+        </section>
+    </main>
+</body>
+</html>

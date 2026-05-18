@@ -20,6 +20,7 @@
                 <a href="/logs">Logs</a>
                 <a href="/jobs/{{ job.id }}/logs">This Job Logs</a>
                 <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                {% include "_auth_nav.html" %}
             </nav>
         </header>
 
@@ -79,7 +80,7 @@
         }
 
         async function updateStatus() {
-            const response = await fetch(`/jobs/${jobId}/status`);
+            const response = await window.UST.authFetch(`/jobs/${jobId}/status`);
             const data = await response.json();
 
             if (data.detail && !data.id) {
@@ -139,7 +140,7 @@
             cancelButton.disabled = true;
             cancelButton.textContent = "Canceling...";
 
-            await fetch(`/jobs/${jobId}/cancel`, { method: "POST" });
+            await window.UST.authFetch(`/jobs/${jobId}/cancel`, { method: "POST" });
             setTimeout(updateStatus, 500);
         });
 

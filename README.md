@@ -8,7 +8,7 @@
 
 A full-stack subtitle automation tool for translating SRT files and media folders into Persian and other languages.
 
-Current version: `1.2.0`
+Current version: `1.3.0`
 
 ## Features
 
@@ -95,14 +95,39 @@ OPENAI_API_KEY=REPLACE_YOUR_API_WITH_THIS_TEXT
 
 Useful settings:
 
-- `APP_VERSION`: semantic application version, current `1.2.0`.
+- `APP_VERSION`: semantic application version, current `1.3.0`.
 - `OPENAI_MODEL`: translation model.
 - `HOST_PORT`: public Docker Compose port on your machine, default `2288`.
+- `AUTH_ENABLED`: set to `true` to require admin login for the UI and API.
+- `ADMIN_USERNAME`: admin login username.
+- `ADMIN_PASSWORD`: admin login password. Use a strong unique value.
+- `SESSION_SECRET`: random 32+ character value used to sign session cookies.
 - `MEDIA_ROOT`: optional backend-accessible root folder for batch scans.
 - `TEMP_DIR`: app-managed temporary files, safe to clear from Settings.
 - `MAX_UPLOAD_MB`: single upload limit.
 - `BATCH_FILE_CONCURRENCY`: concurrent files in batch mode, capped at 10.
 - `FFMPEG_TIMEOUT_SECONDS`: ffmpeg/ffprobe timeout.
+
+## Authentication
+
+Authentication is off by default for trusted local use. To protect the UI and API, enable admin login in `.env`:
+
+```text
+AUTH_ENABLED=true
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin
+SESSION_SECRET=REPLACE_YOUR_SESSION_SECRET_WITH_THIS_TEXT
+```
+
+Generate a session secret with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Restart the app after changing auth settings. When enabled, all UI and API routes require login except `/login`, `/logout`, `/health`, and static assets used by the login page.
+
+The default login is `admin` / `admin`. The app will show a warning while the default password is still in use. Change `ADMIN_PASSWORD` before exposing the app beyond your own machine.
 
 ## Batch Translation
 
@@ -143,7 +168,7 @@ Build and publish the two runtime images with your Docker Hub namespace:
 
 ```bash
 docker login
-APP_VERSION=1.2.0
+APP_VERSION=1.3.0
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:latest ./backend
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:latest ./frontend
 docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION}
@@ -155,7 +180,7 @@ docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:lates
 On a server that should pull images instead of building them locally, use:
 
 ```bash
-DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.2.0 docker compose -f docker-compose.hub.yml up -d
+DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.3.0 docker compose -f docker-compose.hub.yml up -d
 ```
 
 ## Releases
@@ -169,7 +194,7 @@ This project uses semantic versioning: `MAJOR.MINOR.PATCH`.
 For a release, update `VERSION`, `APP_VERSION` in `.env.example`, and any README version examples to the same value. Commit the change, then create a matching Git tag:
 
 ```bash
-APP_VERSION=1.2.0
+APP_VERSION=1.3.0
 git add VERSION .env.example README.md docker-compose.yml docker-compose.hub.yml backend/app/config.py
 git commit -m "Release v${APP_VERSION}"
 git tag -a "v${APP_VERSION}" -m "Release v${APP_VERSION}"
