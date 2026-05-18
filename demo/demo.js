@@ -1,139 +1,503 @@
-const DEMO_MODE = true;
-
-const sampleSrt = `1
-00:00:01,000 --> 00:00:03,200
-Welcome back to the library.
-
-2
-00:00:04,000 --> 00:00:07,500
-We found English subtitles next to the movie file.
-
-3
-00:00:08,000 --> 00:00:11,000
-Now the translation can run without uploading the video.`;
-
-const mockTranslations = {
-    Persian: [
-        "به کتابخانه خوش برگشتید.",
-        "زیرنویس انگلیسی را کنار فایل فیلم پیدا کردیم.",
-        "حالا ترجمه بدون آپلود ویدیو اجرا می شود.",
-    ],
-    Spanish: [
-        "Bienvenido de nuevo a la biblioteca.",
-        "Encontramos subtitulos en ingles junto al archivo de video.",
-        "Ahora la traduccion puede ejecutarse sin subir el video.",
-    ],
-    French: [
-        "Bienvenue dans la bibliotheque.",
-        "Nous avons trouve des sous-titres anglais pres du fichier video.",
-        "La traduction peut maintenant fonctionner sans televerser la video.",
-    ],
-    Arabic: [
-        "مرحبا بعودتك إلى المكتبة.",
-        "وجدنا ترجمة إنجليزية بجانب ملف الفيديو.",
-        "يمكن تشغيل الترجمة الآن دون رفع الفيديو.",
-    ],
+const pageMeta = {
+    home: ["Subtitle Translator", "Clean subtitles for your library"],
+    batch: ["Batch Translation", "Translate a folder of movies or shows"],
+    about: ["About", "Universal Subtitle Translator"],
+    settings: ["Settings", "Loaded from your environment"],
+    logs: ["Logs", "Activity, warnings, errors, provider usage, and cleanup events"],
 };
 
-const sourceText = document.getElementById("source-text");
-const sampleButton = document.getElementById("sample-button");
-const translationForm = document.getElementById("translation-form");
-const translateButton = document.getElementById("translate-button");
-const targetLanguage = document.getElementById("target-language");
-const progressBar = document.getElementById("progress-bar");
-const resultOutput = document.getElementById("result-output");
-const resultState = document.getElementById("result-state");
-const scanButton = document.getElementById("scan-button");
-const scanTable = document.getElementById("scan-table");
-const mediaPath = document.getElementById("media-path");
+const initialJobs = [
+    { id: "job-demo-104", input: "Pilot.en.srt", output: "Pilot.fa.srt", status: "done", progress: 100 },
+    { id: "job-demo-103", input: "Movie.Night.2026.mkv", output: "Movie.Night.2026.fa.srt", status: "running", progress: 68 },
+    { id: "job-demo-102", input: "Episode.02.mkv", output: "", status: "skipped", progress: 100 },
+    { id: "job-demo-101", input: "Archive.Special.en.srt", output: "Archive.Special.fa.srt", status: "done", progress: 100 },
+];
 
-function sleep(ms) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
+const scanRows = [
+    {
+        video: "Movie.Night.2026.mkv",
+        subfolder: ".",
+        source: "external en",
+        reason: "External subtitle preferred by language priority",
+        step: "found external subtitle",
+        subtitles: "524",
+        output: "Movie.Night.2026.fa.srt",
+        note: "",
+    },
+    {
+        video: "Shows/Episode.01.mkv",
+        subfolder: "Shows",
+        source: "embedded en",
+        reason: "Embedded subtitle selected by language priority",
+        step: "extracting embedded subtitle",
+        subtitles: "760",
+        output: "Episode.01.fa.srt",
+        note: "Read-only media; output will be saved in OUTPUT_DIR",
+    },
+    {
+        video: "Shows/Episode.02.mkv",
+        subfolder: "Shows",
+        source: "none",
+        reason: "No external or extractable embedded subtitle found",
+        step: "skipped",
+        subtitles: "0",
+        output: "-",
+        note: "",
+    },
+];
+
+const batches = [
+    { folder: "/media/Movies", status: "running", done: 2, failed: 0, total: 4 },
+    { folder: "/media/Shows", status: "partial", done: 7, failed: 1, total: 8 },
+    { folder: "/media/Archive", status: "done", done: 12, failed: 0, total: 12 },
+];
+
+const readiness = [
+    ["OpenAI API key", "Mocked", "Demo mode never uses a real API key."],
+    ["OpenAI model", "Mock provider", "No provider requests are sent."],
+    ["Upload folder", "Disabled", "Browser uploads are not available in the public demo."],
+    ["Output folder", "Mocked", "No real files are written."],
+    ["Media root", "/media", "Sample mounted path for Docker deployments."],
+    ["Authentication", "Demo session", "No real login is required."],
+];
+
+const settingsRows = [
+    ["Model", "mock-demo-provider"],
+    ["Upload dir", "disabled in public demo"],
+    ["Output dir", "/app/data/outputs"],
+    ["Temp dir", "/app/data/temp"],
+    ["Database", "not used"],
+    ["Media root", "/media"],
+    ["Default source language", "Auto"],
+    ["Default target language", "Persian"],
+    ["Default style", "natural_conversational"],
+    ["Batch size", "40"],
+    ["Max chars per batch", "12000"],
+    ["Batch file concurrency", "4"],
+    ["Max upload size", "disabled"],
+    ["FFmpeg timeout", "simulated"],
+    ["OpenAI timeout", "simulated"],
+];
+
+let jobs = initialJobs.map((job) => ({ ...job }));
+let logs = [
+    {
+        id: "log-208",
+        severity: "success",
+        category: "translation",
+        title: "Translation completed",
+        message: "Demo job completed for Pilot.en.srt. Output: Pilot.fa.srt.",
+        time: "2 minutes ago",
+        event: "job_completed",
+        context: [["Job", "job-demo-104"], ["Model", "mock-demo-provider"], ["Tokens", "1,284"]],
+        quiet: false,
+    },
+    {
+        id: "log-207",
+        severity: "info",
+        category: "media",
+        title: "Source subtitle selected",
+        message: "External subtitle selected for Movie.Night.2026.mkv. Source: Movie.Night.2026.en.srt.",
+        time: "4 minutes ago",
+        event: "source_subtitle_selected",
+        context: [["Batch", "batch-demo-18"], ["Language", "en"]],
+        quiet: false,
+    },
+    {
+        id: "log-206",
+        severity: "warning",
+        category: "config",
+        title: "Public demo mode",
+        message: "Real uploads, provider calls, and database writes are disabled.",
+        time: "5 minutes ago",
+        event: "demo_mode_enabled",
+        context: [["Mode", "DEMO_MODE"], ["Backend", "none"]],
+        quiet: false,
+    },
+    {
+        id: "log-205",
+        severity: "info",
+        category: "translation",
+        title: "Provider request completed",
+        message: "Mock provider returned simulated subtitles for batch 1 of 3.",
+        time: "7 minutes ago",
+        event: "provider_request_completed",
+        context: [["Input tokens", "612"], ["Output tokens", "490"]],
+        quiet: true,
+    },
+    {
+        id: "log-204",
+        severity: "error",
+        category: "media",
+        title: "Media file skipped",
+        message: "Episode.02.mkv was skipped because no readable subtitle track was found.",
+        time: "9 minutes ago",
+        event: "media_file_skipped",
+        context: [["File", "Episode.02.mkv"], ["Status", "skipped"]],
+        quiet: false,
+    },
+];
+
+const pageTitle = document.getElementById("page-title");
+const pageSubtitle = document.getElementById("page-subtitle");
+const pages = Array.from(document.querySelectorAll("[data-page]"));
+const pageLinks = Array.from(document.querySelectorAll("[data-page-link]"));
+const themeToggle = document.querySelector("[data-theme-toggle]");
+
+function escapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
 }
 
-function buildTranslatedSrt(language) {
-    const lines = mockTranslations[language] || mockTranslations.Persian;
+function showPage(pageName) {
+    const safePage = pageMeta[pageName] ? pageName : "home";
 
-    return `1
-00:00:01,000 --> 00:00:03,200
-${lines[0]}
-
-2
-00:00:04,000 --> 00:00:07,500
-${lines[1]}
-
-3
-00:00:08,000 --> 00:00:11,000
-${lines[2]}`;
-}
-
-sampleButton.addEventListener("click", () => {
-    sourceText.value = sampleSrt;
-    resultState.textContent = "Ready";
-});
-
-translationForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    if (!DEMO_MODE) {
-        return;
+    for (const page of pages) {
+        page.hidden = page.dataset.page !== safePage;
     }
 
-    translateButton.disabled = true;
-    translateButton.textContent = "Simulating...";
-    resultState.textContent = "Running";
-    resultOutput.textContent = "Preparing mock batches...";
-    progressBar.style.width = "18%";
+    for (const link of pageLinks) {
+        link.classList.toggle("active", link.dataset.pageLink === safePage);
+    }
 
-    await sleep(450);
-    resultOutput.textContent = "Mock provider response received. Repair check passed.";
-    progressBar.style.width = "62%";
+    pageTitle.textContent = pageMeta[safePage][0];
+    pageSubtitle.textContent = pageMeta[safePage][1];
 
-    await sleep(550);
-    resultOutput.textContent = buildTranslatedSrt(targetLanguage.value);
-    progressBar.style.width = "100%";
-    resultState.textContent = "Done";
-    translateButton.disabled = false;
-    translateButton.textContent = "Simulate Translation";
-});
+    if (location.hash.slice(1) !== safePage) {
+        history.replaceState(null, "", `#${safePage}`);
+    }
+}
 
-scanButton.addEventListener("click", async () => {
-    scanButton.disabled = true;
-    scanButton.textContent = "Scanning...";
-    scanTable.innerHTML = `<tr><td colspan="4" class="empty">Scanning ${mediaPath.value || "/media/Movies"} with mock data...</td></tr>`;
+function renderHome() {
+    const outputs = document.getElementById("recent-outputs");
+    const recentJobs = document.getElementById("recent-jobs");
 
-    await sleep(650);
+    outputs.innerHTML = jobs
+        .filter((job) => job.output)
+        .slice(0, 5)
+        .map((job) => `
+            <div class="recent-item">
+                <div>
+                    <strong>${escapeHtml(job.output)}</strong>
+                    <span>${escapeHtml(job.input)}</span>
+                </div>
+            </div>
+        `)
+        .join("");
 
-    scanTable.innerHTML = [
-        {
-            video: "Movie.Night.2026.mkv",
-            source: "Movie.Night.2026.en.srt",
-            status: "Ready",
-            output: "Movie.Night.2026.fa.srt",
-        },
-        {
-            video: "Shows/Episode.01.mkv",
-            source: "Embedded text subtitle, stream 2",
-            status: "Read-only media, output goes to OUTPUT_DIR",
-            output: "/app/data/outputs/Shows/Episode.01.fa.srt",
-        },
-        {
-            video: "Shows/Episode.02.mkv",
-            source: "No readable subtitle track",
-            status: "Skipped",
-            output: "-",
-        },
-    ].map((row) => `
+    recentJobs.innerHTML = jobs
+        .slice(0, 6)
+        .map((job) => `
+            <a class="recent-item recent-link" href="#logs" data-page-link="logs">
+                <div>
+                    <strong>${escapeHtml(job.input)}</strong>
+                    <span>${job.progress}% complete</span>
+                </div>
+                <span class="status ${job.status}">${job.status}</span>
+            </a>
+        `)
+        .join("");
+}
+
+function renderScanRows() {
+    document.getElementById("scan-table").innerHTML = scanRows.map((row) => `
         <tr>
-            <td>${row.video}</td>
-            <td>${row.source}</td>
-            <td>${row.status}</td>
-            <td>${row.output}</td>
+            <td class="path">${escapeHtml(row.video)}</td>
+            <td class="path">${escapeHtml(row.subfolder)}</td>
+            <td>
+                <div>${escapeHtml(row.source)}</div>
+                <div class="file-subtext">${escapeHtml(row.reason)}</div>
+            </td>
+            <td>${escapeHtml(row.step)}</td>
+            <td>${escapeHtml(row.subtitles)}</td>
+            <td class="path">
+                ${escapeHtml(row.output)}
+                ${row.note ? `<div class="file-subtext">${escapeHtml(row.note)}</div>` : ""}
+            </td>
         </tr>
     `).join("");
+}
 
-    scanButton.disabled = false;
-    scanButton.textContent = "Simulate Scan";
-});
+function renderBatches() {
+    document.getElementById("recent-batches").innerHTML = batches.map((batch) => `
+        <tr>
+            <td class="path">${escapeHtml(batch.folder)}</td>
+            <td><span class="status ${batch.status}">${batch.status}</span></td>
+            <td>${batch.done} done${batch.failed ? `, ${batch.failed} failed` : ""} / ${batch.total}</td>
+            <td><button type="button" class="secondary" data-open-log>View</button></td>
+        </tr>
+    `).join("");
+}
 
-sourceText.value = sampleSrt;
+function renderSettings() {
+    document.getElementById("readiness-grid").innerHTML = readiness.map((check) => `
+        <div class="readiness-item">
+            <div class="readiness-topline">
+                <span>${escapeHtml(check[0])}</span>
+                <span class="status done">Ready</span>
+            </div>
+            <strong>${escapeHtml(check[1])}</strong>
+            <p>${escapeHtml(check[2])}</p>
+        </div>
+    `).join("");
+
+    document.getElementById("settings-table").innerHTML = settingsRows.map((row) => `
+        <tr>
+            <th>${escapeHtml(row[0])}</th>
+            <td class="path">${escapeHtml(row[1])}</td>
+        </tr>
+    `).join("");
+}
+
+function renderLogHero() {
+    const translated = jobs.filter((job) => job.status === "done").length;
+    const errors = logs.filter((log) => log.severity === "error").length;
+    const warnings = logs.filter((log) => log.severity === "warning").length;
+    const skipped = jobs.filter((job) => job.status === "skipped").length;
+
+    document.getElementById("log-hero").innerHTML = [
+        ["Files translated", translated, ""],
+        ["Tokens used", "3,418", ""],
+        ["Estimated cost", "$0.0000", ""],
+        ["Errors", errors, "severity-error"],
+        ["Warnings", warnings, "severity-warning"],
+        ["Skipped", skipped, ""],
+    ].map((metric) => `
+        <div class="log-metric ${metric[2]}">
+            <span>${metric[0]}</span>
+            <strong>${metric[1]}</strong>
+        </div>
+    `).join("");
+}
+
+function renderLogs() {
+    const timeline = document.getElementById("log-timeline");
+    timeline.innerHTML = logs.map((log) => {
+        const search = `${log.severity} ${log.category} ${log.title} ${log.message} ${log.event}`.toLowerCase();
+        return `
+            <article class="log-entry severity-${log.severity} ${log.quiet ? "is-quiet" : ""}"
+                data-severity="${log.severity}"
+                data-category="${log.category}"
+                data-quiet="${log.quiet}"
+                data-search="${escapeHtml(search)}">
+                <div class="timeline-dot"></div>
+                <div class="log-entry-main">
+                    <div class="log-entry-topline">
+                        <div class="log-title-wrap">
+                            <span class="status ${log.severity}">${log.severity}</span>
+                            <span class="pill">${escapeHtml(log.category)}</span>
+                            <h2>${escapeHtml(log.title)}</h2>
+                        </div>
+                        <time>${escapeHtml(log.time)}</time>
+                    </div>
+                    <p class="log-message">${escapeHtml(log.message)}</p>
+                    <div class="log-context">
+                        ${log.context.map((item) => `<span><strong>${escapeHtml(item[0])}</strong>${escapeHtml(item[1])}</span>`).join("")}
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join("");
+
+    document.getElementById("total-log-count").textContent = logs.length;
+    renderLogHero();
+    applyLogFilters();
+}
+
+function applyLogFilters() {
+    const query = (document.getElementById("log-search").value || "").trim().toLowerCase();
+    const severity = document.getElementById("log-severity-filter").value || "all";
+    const category = document.getElementById("log-category-filter").value || "all";
+    const includeQuiet = document.getElementById("log-show-quiet").checked;
+    const entries = Array.from(document.querySelectorAll(".log-entry"));
+    let visible = 0;
+
+    for (const entry of entries) {
+        const shouldShow = (!query || entry.dataset.search.includes(query))
+            && (severity === "all" || entry.dataset.severity === severity)
+            && (category === "all" || entry.dataset.category === category)
+            && (includeQuiet || entry.dataset.quiet !== "true");
+
+        entry.hidden = !shouldShow;
+        if (shouldShow) {
+            visible += 1;
+        }
+    }
+
+    document.getElementById("visible-log-count").textContent = visible;
+    document.getElementById("log-empty").hidden = visible !== 0;
+}
+
+function addLog(log) {
+    logs.unshift({
+        id: `log-demo-${Math.floor(Math.random() * 9000) + 1000}`,
+        time: "just now",
+        quiet: false,
+        ...log,
+    });
+    renderLogs();
+}
+
+function resetDemoData() {
+    jobs = initialJobs.map((job) => ({ ...job }));
+    logs = logs.slice(-5);
+    renderHome();
+    renderLogs();
+}
+
+function bindEvents() {
+    document.addEventListener("click", (event) => {
+        const pageLink = event.target.closest("[data-page-link]");
+        if (pageLink) {
+            event.preventDefault();
+            showPage(pageLink.dataset.pageLink);
+        }
+
+        if (event.target.matches("[data-open-log]")) {
+            showPage("logs");
+        }
+    });
+
+    themeToggle.addEventListener("click", () => {
+        const root = document.documentElement;
+        const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
+        root.dataset.theme = nextTheme;
+        themeToggle.textContent = nextTheme === "light" ? "Light mode" : "Dark mode";
+    });
+
+    document.getElementById("single-file-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const button = document.getElementById("single-submit");
+        button.disabled = true;
+        button.textContent = "Simulating...";
+
+        window.setTimeout(() => {
+            jobs.unshift({
+                id: "job-demo-new",
+                input: "Demo.Movie.en.srt",
+                output: "Demo.Movie.fa.srt",
+                status: "done",
+                progress: 100,
+            });
+            addLog({
+                severity: "success",
+                category: "translation",
+                title: "Demo translation completed",
+                message: "Simulated translation completed for Demo.Movie.en.srt.",
+                event: "demo_translation_completed",
+                context: [["Job", "job-demo-new"], ["Provider", "mock"]],
+            });
+            renderHome();
+            button.disabled = false;
+            button.textContent = "Simulate Translation";
+        }, 800);
+    });
+
+    document.getElementById("pick-folder-button").addEventListener("click", () => {
+        document.getElementById("folder_path").value = "/media/Shows";
+        addLog({
+            severity: "info",
+            category: "media",
+            title: "Demo folder selected",
+            message: "Mock folder picker selected /media/Shows.",
+            event: "demo_folder_selected",
+            context: [["Path", "/media/Shows"]],
+        });
+    });
+
+    document.getElementById("scan-button").addEventListener("click", () => {
+        const scanButton = document.getElementById("scan-button");
+        const label = document.getElementById("scan-button-label");
+        const startButton = document.getElementById("start-button");
+        scanButton.classList.add("is-scanning");
+        scanButton.disabled = true;
+        label.textContent = "Scanning... 12 files checked";
+
+        window.setTimeout(() => {
+            scanButton.classList.remove("is-scanning");
+            scanButton.disabled = false;
+            label.textContent = "Scan Path";
+            startButton.disabled = false;
+            document.getElementById("scan-error").textContent = "";
+            renderScanRows();
+            addLog({
+                severity: "info",
+                category: "media",
+                title: "Preview scan completed",
+                message: "Demo scan found 3 ready files and 1 skipped file.",
+                event: "demo_scan_completed",
+                context: [["Path", document.getElementById("folder_path").value], ["Files", "3"]],
+            });
+        }, 900);
+    });
+
+    document.getElementById("batch-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        batches.unshift({ folder: document.getElementById("folder_path").value, status: "running", done: 1, failed: 0, total: 3 });
+        renderBatches();
+        addLog({
+            severity: "success",
+            category: "translation",
+            title: "Demo batch started",
+            message: "Mock batch translation started. No files were read or written.",
+            event: "demo_batch_started",
+            context: [["Concurrency", document.getElementById("max_concurrency").value], ["Provider", "mock"]],
+        });
+        showPage("batch");
+    });
+
+    document.getElementById("cleanup-button").addEventListener("click", () => {
+        resetDemoData();
+        document.getElementById("cleanup-result").hidden = false;
+        addLog({
+            severity: "info",
+            category: "cleanup",
+            title: "Demo cleanup completed",
+            message: "Mock history was reset in browser memory.",
+            event: "demo_cleanup_completed",
+            context: [["Files deleted", "0"], ["External media", "not touched"]],
+        });
+    });
+
+    for (const controlId of ["log-search", "log-severity-filter", "log-category-filter", "log-show-quiet"]) {
+        const control = document.getElementById(controlId);
+        control.addEventListener("input", applyLogFilters);
+        control.addEventListener("change", applyLogFilters);
+    }
+
+    document.getElementById("download-csv").addEventListener("click", () => {
+        addLog({
+            severity: "info",
+            category: "logs",
+            title: "Demo CSV requested",
+            message: "CSV download is simulated in public demo mode.",
+            event: "demo_csv_requested",
+            context: [["Download", "simulated"]],
+        });
+    });
+
+    document.getElementById("raw-json").addEventListener("click", () => {
+        addLog({
+            severity: "info",
+            category: "logs",
+            title: "Demo raw JSON requested",
+            message: "Raw JSON view is simulated in public demo mode.",
+            event: "demo_json_requested",
+            context: [["API", "disabled"]],
+        });
+    });
+
+    window.addEventListener("hashchange", () => showPage(location.hash.slice(1) || "home"));
+}
+
+renderHome();
+renderScanRows();
+renderBatches();
+renderSettings();
+renderLogs();
+bindEvents();
+showPage(location.hash.slice(1) || "home");

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,108 +8,392 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <main class="shell">
+    <main class="app-shell">
         <header class="topbar">
-            <div>
-                <div class="brand">Universal Subtitle Translator</div>
-                <div class="subtle">Static Cloudflare Pages demo</div>
+            <div class="brand">
+                <div class="brand-title" id="page-title">Subtitle Translator</div>
+                <div class="brand-subtitle" id="page-subtitle">Clean subtitles for your library</div>
             </div>
-            <span class="demo-pill">DEMO_MODE</span>
+            <nav class="nav" aria-label="Demo navigation">
+                <a class="active" href="#home" data-page-link="home">Home</a>
+                <a href="#batch" data-page-link="batch">Batch</a>
+                <a href="#about" data-page-link="about">About</a>
+                <a href="#settings" data-page-link="settings">Settings</a>
+                <a href="#logs" data-page-link="logs">Logs</a>
+                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                <span class="session-chip">Signed in as demo</span>
+                <button type="button" class="nav-logout-button" disabled>Logout</button>
+            </nav>
         </header>
 
-        <section class="banner">
-            <strong>Demo mode is active.</strong>
-            <span>This page uses mock data and simulated translation only. It does not upload files, call OpenAI, store secrets, or contact the production API.</span>
-        </section>
-
-        <section class="hero">
-            <div>
-                <p class="eyebrow">No Backend Required</p>
-                <h1>Preview the subtitle workflow safely.</h1>
-                <p class="lead">Try the interface with sample subtitles and a mock media-library scan. The real Docker app keeps using OpenAI and local files normally.</p>
+        <div class="warning-stack">
+            <div class="notice warning demo-banner">
+                <strong>Public demo mode - simulated only</strong>
+                <span>No real uploads, API calls, database writes, or backend requests happen on this page.</span>
             </div>
-            <div class="status-card">
-                <span class="status-dot"></span>
+        </div>
+
+        <section class="demo-page" data-page="home">
+            <section class="home-hero">
                 <div>
-                    <strong>Static demo ready</strong>
-                    <p>No uploads. No API calls. No database.</p>
+                    <div class="eyebrow">Subtitle Translation</div>
+                    <h1>Translate subtitles without the clutter.</h1>
+                    <p class="lead">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
                 </div>
-            </div>
-        </section>
+                <a class="button secondary batch-link" href="#batch" data-page-link="batch">Translate Mounted Media</a>
+            </section>
 
-        <section class="grid">
-            <form class="panel" id="translation-form">
+            <section class="panel primary-panel">
                 <div class="panel-heading">
                     <div>
-                        <h2>Mock Translation</h2>
-                        <p>Paste or use sample SRT text. Translation is simulated in your browser.</p>
+                        <h2>New Translation</h2>
+                        <p class="hint">Browser upload is for small SRT/video files only. This public demo uses a mock file and simulated translation.</p>
                     </div>
-                    <button type="button" class="secondary" id="sample-button">Use Sample</button>
+                    <span class="pill">Upload disabled in demo</span>
                 </div>
 
-                <label for="source-text">Subtitle text</label>
-                <textarea id="source-text" rows="12" spellcheck="false"></textarea>
+                <form id="single-file-form">
+                    <div class="home-translate-grid">
+                        <div>
+                            <label>Subtitle or video file</label>
+                            <input value="Demo.Movie.en.srt" disabled>
+                            <p class="field-hint">The real app accepts .srt and supported video files. Demo mode never reads local files.</p>
+                        </div>
 
-                <div class="controls">
-                    <label>
-                        Target language
-                        <select id="target-language">
-                            <option>Persian</option>
-                            <option>Spanish</option>
-                            <option>French</option>
-                            <option>Arabic</option>
-                        </select>
-                    </label>
-                    <button class="primary" id="translate-button" type="submit">Simulate Translation</button>
-                </div>
-
-                <div class="progress" aria-hidden="true">
-                    <span id="progress-bar"></span>
-                </div>
-            </form>
-
-            <section class="panel">
-                <div class="panel-heading">
-                    <div>
-                        <h2>Mock Result</h2>
-                        <p>Output appears here after the simulated run.</p>
+                        <div>
+                            <label>Target language</label>
+                            <select name="target_language">
+                                <option selected>Persian</option>
+                                <option>Spanish</option>
+                                <option>French</option>
+                                <option>Arabic</option>
+                            </select>
+                        </div>
                     </div>
-                    <span class="small-pill" id="result-state">Idle</span>
+
+                    <details class="advanced-options">
+                        <summary>Advanced</summary>
+                        <div class="advanced-grid">
+                            <label class="toggle">
+                                <input name="overwrite_existing" type="checkbox" value="true">
+                                Overwrite existing subtitle
+                            </label>
+
+                            <div>
+                                <label>Translation style</label>
+                                <select name="style">
+                                    <option selected>Natural subtitle translation</option>
+                                    <option>Subtitle friendly</option>
+                                    <option>Formal</option>
+                                    <option>Literal</option>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="actions">
+                        <button type="submit" class="primary hero-action" id="single-submit">Simulate Translation</button>
+                    </div>
+
+                    <p class="error" id="single-file-error"></p>
+                </form>
+            </section>
+
+            <section class="recent-grid">
+                <div class="panel quiet-panel">
+                    <div class="section-heading">
+                        <h2>Recent Outputs</h2>
+                    </div>
+                    <div class="compact-list-panel" id="recent-outputs"></div>
                 </div>
-                <pre id="result-output">No demo translation yet.</pre>
+
+                <div class="panel quiet-panel">
+                    <div class="section-heading">
+                        <h2>Recent Jobs</h2>
+                    </div>
+                    <div class="compact-list-panel" id="recent-jobs"></div>
+                </div>
             </section>
         </section>
 
-        <section class="panel">
-            <div class="panel-heading">
-                <div>
-                    <h2>Mounted Media Preview</h2>
-                    <p>Demo of server-side path mode for Docker/Portainer deployments.</p>
+        <section class="demo-page" data-page="batch" hidden>
+            <section class="page-header">
+                <div class="eyebrow">Server Path Translation</div>
+                <h1>Translate mounted media</h1>
+                <p class="lead">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
+            </section>
+
+            <section class="panel">
+                <form id="batch-form">
+                    <div class="batch-translate-grid">
+                        <div>
+                            <label for="folder_path">Mounted file or folder path</label>
+                            <div class="folder-path-control">
+                                <input id="folder_path" name="folder_path" value="/media/Movies" required>
+                                <button type="button" class="secondary" id="pick-folder-button">Browse</button>
+                            </div>
+                            <p class="field-hint">Demo mode simulates this path. The real Docker app scans mounted paths from inside the container.</p>
+                        </div>
+
+                        <div>
+                            <label for="target_language">Target language</label>
+                            <select id="target_language" name="target_language">
+                                <option selected>Persian</option>
+                                <option>Spanish</option>
+                                <option>French</option>
+                                <option>Arabic</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <details class="advanced-options">
+                        <summary>Advanced</summary>
+                        <div class="advanced-grid batch-advanced-grid">
+                            <label class="toggle">
+                                <input id="overwrite_existing" name="overwrite_existing" type="checkbox" value="true">
+                                Overwrite existing translations
+                            </label>
+
+                            <div>
+                                <label for="max_concurrency">Max concurrency</label>
+                                <input id="max_concurrency" name="max_concurrency" type="number" min="1" max="10" value="4">
+                            </div>
+
+                            <div>
+                                <label for="style">Translation style</label>
+                                <select id="style" name="style">
+                                    <option selected>Natural subtitle translation</option>
+                                    <option>Subtitle friendly</option>
+                                    <option>Formal</option>
+                                    <option>Literal</option>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div class="actions">
+                        <button type="button" class="primary scan-button" id="scan-button">
+                            <span class="button-progress" id="scan-button-progress"></span>
+                            <span class="button-label" id="scan-button-label">Scan Path</span>
+                        </button>
+                        <button type="button" class="danger" id="cancel-scan-button" hidden>Cancel Scan</button>
+                        <button type="submit" class="secondary" id="start-button" disabled>Start Batch Translation</button>
+                    </div>
+                </form>
+
+                <p class="error" id="scan-error"></p>
+            </section>
+
+            <section class="panel" id="scan-results">
+                <h2>Scan Results</h2>
+                <div class="summary">
+                    <span class="pill" id="file-count">3 files to process</span>
+                    <span class="pill" id="skipped-count">1 skipped</span>
+                    <span class="pill" id="subtitle-count">1,284 subtitles</span>
+                    <span class="pill">Concurrency: 4 files</span>
                 </div>
-                <button class="secondary" id="scan-button" type="button">Simulate Scan</button>
-            </div>
 
-            <label for="media-path">Mounted path</label>
-            <input id="media-path" value="/media/Movies" autocomplete="off">
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Video</th>
+                                <th>Subfolder</th>
+                                <th>Source</th>
+                                <th>Step</th>
+                                <th>Subtitles</th>
+                                <th>Output</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scan-table"></tbody>
+                    </table>
+                </div>
+            </section>
 
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Video</th>
-                            <th>Source</th>
-                            <th>Status</th>
-                            <th>Output</th>
-                        </tr>
-                    </thead>
-                    <tbody id="scan-table">
-                        <tr>
-                            <td colspan="4" class="empty">Run a simulated scan.</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <section class="panel">
+                <h2>Recent Server Runs</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Folder</th>
+                                <th>Status</th>
+                                <th>Files</th>
+                                <th>Open</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-batches"></tbody>
+                    </table>
+                </div>
+            </section>
         </section>
+
+        <section class="demo-page" data-page="about" hidden>
+            <section class="page-header">
+                <div class="eyebrow">Open Source Subtitle Automation</div>
+                <h1>Translate subtitles without losing your media workflow.</h1>
+                <p class="lead">Universal Subtitle Translator is a full-stack subtitle automation tool that can translate SRT files, scan folders recursively, detect video files, extract embedded subtitles with FFmpeg, and save translated subtitles next to the original media.</p>
+            </section>
+
+            <section class="panel">
+                <h2>Key Features</h2>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <h3>Single-file translation</h3>
+                        <p>Upload an SRT or video file, detect the best source subtitle, and generate a target-language SRT with consistent naming.</p>
+                    </div>
+                    <div class="feature-item">
+                        <h3>Recursive batch mode</h3>
+                        <p>Scan media folders, skip existing target subtitles, preview candidates, and process multiple files with controlled concurrency.</p>
+                    </div>
+                    <div class="feature-item">
+                        <h3>Smart subtitle selection</h3>
+                        <p>Prefer external subtitles first, then embedded text tracks, with common languages and unknown subtitles ranked automatically.</p>
+                    </div>
+                    <div class="feature-item">
+                        <h3>FFmpeg integration</h3>
+                        <p>Use ffprobe to inspect subtitle streams and FFmpeg to extract embedded subtitle tracks before translation.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Supported Inputs</h2>
+                <div class="summary">
+                    <span class="pill">.srt subtitles</span>
+                    <span class="pill">.mkv video</span>
+                    <span class="pill">.mp4 video</span>
+                    <span class="pill">.avi video</span>
+                    <span class="pill">.mov video</span>
+                    <span class="pill">.webm video</span>
+                </div>
+
+                <h2>Translation Provider</h2>
+                <div class="summary">
+                    <span class="pill">OpenAI in production</span>
+                    <span class="pill">Mock provider in demo</span>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Privacy</h2>
+                <p class="lead">The production app processes files locally and sends subtitle text only to the configured translation provider. This public demo sends nothing anywhere.</p>
+                <div class="about-meta">
+                    <div>
+                        <span>License</span>
+                        <strong>MIT</strong>
+                    </div>
+                    <div>
+                        <span>Author</span>
+                        <strong>Afshin Saberi</strong>
+                    </div>
+                    <div>
+                        <span>Version</span>
+                        <strong>1.4.0 demo</strong>
+                    </div>
+                </div>
+            </section>
+        </section>
+
+        <section class="demo-page" data-page="settings" hidden>
+            <section class="panel">
+                <h1>Runtime Settings</h1>
+                <p class="lead">Settings shown here are safe mock values for the public static demo.</p>
+
+                <h2>System Readiness</h2>
+                <div class="notice neutral">
+                    <div class="readiness-topline">
+                        <span>System Health</span>
+                        <span class="status done">Demo ready</span>
+                    </div>
+                    <span>Static demo is healthy. Real translation is intentionally disabled.</span>
+                </div>
+                <div class="readiness-grid" id="readiness-grid"></div>
+
+                <div class="table-wrap">
+                    <table>
+                        <tbody id="settings-table"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>Cleanup</h2>
+                <p class="lead">Demo cleanup only resets mock rows in this browser session.</p>
+                <div class="notice neutral">
+                    <strong>External media folders are not touched.</strong>
+                    <span>There are no real files in this static demo.</span>
+                </div>
+                <div class="actions">
+                    <button type="button" class="danger" id="cleanup-button">Clear Demo History</button>
+                </div>
+                <div class="notice neutral" id="cleanup-result" hidden>
+                    <strong>Demo history reset</strong>
+                    <span>Mock jobs and logs were restored to their initial sample state.</span>
+                </div>
+            </section>
+        </section>
+
+        <section class="demo-page" data-page="logs" hidden>
+            <section class="log-hero" id="log-hero"></section>
+
+            <section class="log-console">
+                <div class="log-filter-bar">
+                    <div>
+                        <label for="log-search">Search logs</label>
+                        <input id="log-search" type="search" placeholder="Search message, file, job id, model, category">
+                    </div>
+                    <div>
+                        <label for="log-severity-filter">Severity</label>
+                        <select id="log-severity-filter">
+                            <option value="all">All severities</option>
+                            <option value="success">success</option>
+                            <option value="info">info</option>
+                            <option value="warning">warning</option>
+                            <option value="error">error</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="log-category-filter">Category</label>
+                        <select id="log-category-filter">
+                            <option value="all">All categories</option>
+                            <option value="translation">translation</option>
+                            <option value="media">media</option>
+                            <option value="config">config</option>
+                            <option value="cleanup">cleanup</option>
+                        </select>
+                    </div>
+                    <label class="toggle log-debug-toggle">
+                        <input id="log-show-quiet" type="checkbox">
+                        Show quiet details
+                    </label>
+                </div>
+
+                <div class="log-toolbar">
+                    <div class="log-count">
+                        <strong id="visible-log-count">0</strong>
+                        <span>visible of <span id="total-log-count">0</span></span>
+                    </div>
+                    <div class="toolbar-actions">
+                        <button type="button" class="secondary" id="download-csv">Download CSV</button>
+                        <button type="button" class="secondary" id="raw-json">Raw JSON</button>
+                    </div>
+                </div>
+
+                <div class="timeline" id="log-timeline"></div>
+                <div class="empty-state" id="log-empty" hidden>No logs match the current filters.</div>
+            </section>
+        </section>
+
+        <footer class="site-footer">
+            <div class="footer-copy">
+                <strong>Universal Subtitle Translator</strong> v1.4.0 demo is free and open source, licensed under MIT.
+            </div>
+            <div class="footer-links">
+                <a href="#about" data-page-link="about">About</a>
+                <span>Public demo</span>
+            </div>
+        </footer>
     </main>
 
     <script src="demo.js"></script>
