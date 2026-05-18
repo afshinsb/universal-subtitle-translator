@@ -4,9 +4,90 @@ from dataclasses import dataclass
 from openai import OpenAI
 
 from app.config import settings
-from app.models import has_persian_characters, is_persian_language
+from app.models import LANGUAGE_CODES, has_persian_characters, is_persian_language, normalize_language
 
 LINE_BREAK_TOKEN = "<LB>"
+
+LANGUAGE_STYLE_GUIDANCE = {
+    "fa": {
+        "natural_conversational": "Use contemporary, conversational Persian in Persian script. Keep dialogue idiomatic, fluent, and emotionally natural; avoid stiff word-for-word phrasing.",
+        "formal": "Use polished, respectful Persian in Persian script. Keep it fluent and readable, not archaic or bureaucratic.",
+        "literal": "Stay close to the source meaning and ordering where possible, but still write grammatical Persian in Persian script.",
+        "subtitle_friendly": "Use concise Persian subtitle phrasing in Persian script. Prefer short, direct sentences and avoid over-explaining.",
+    },
+    "en": {
+        "natural_conversational": "Use natural spoken English. Prefer contractions and everyday phrasing when they fit the character and scene.",
+        "formal": "Use polished standard English. Avoid slang while keeping subtitles clear and not overly academic.",
+        "literal": "Stay close to the source wording and meaning, but keep English grammatical and understandable.",
+        "subtitle_friendly": "Use compact English subtitle phrasing. Prefer short clauses, direct verbs, and readable timing.",
+    },
+    "ar": {
+        "natural_conversational": "Use clear modern Arabic that feels natural in subtitles. Avoid overly literal calques and keep punctuation RTL-friendly.",
+        "formal": "Use polished Modern Standard Arabic. Keep it accessible for subtitles, not ornate or classical.",
+        "literal": "Stay close to the source meaning while preserving natural Arabic grammar and punctuation.",
+        "subtitle_friendly": "Use concise Arabic subtitles with short readable lines and natural RTL punctuation spacing.",
+    },
+    "tr": {
+        "natural_conversational": "Use natural contemporary Turkish. Preserve conversational tone, particles, and politeness naturally.",
+        "formal": "Use polished formal Turkish with respectful phrasing. Avoid casual slang.",
+        "literal": "Stay close to the source meaning while keeping Turkish word order and suffixes natural.",
+        "subtitle_friendly": "Use concise Turkish subtitle phrasing. Avoid long nested clauses when a short sentence works.",
+    },
+    "es": {
+        "natural_conversational": "Use natural conversational Spanish. Keep idioms fluent and choose neutral Spanish unless the context clearly suggests a region.",
+        "formal": "Use polished formal Spanish. Keep it respectful and clear without sounding legalistic.",
+        "literal": "Stay close to the source meaning while avoiding awkward English-like Spanish structures.",
+        "subtitle_friendly": "Use concise Spanish subtitle phrasing. Prefer short sentences and avoid unnecessary pronouns or filler.",
+    },
+    "fr": {
+        "natural_conversational": "Use natural contemporary French. Keep dialogue idiomatic and avoid English calques.",
+        "formal": "Use polished formal French with appropriate register. Keep subtitles readable, not literary.",
+        "literal": "Stay close to the source meaning while preserving natural French syntax.",
+        "subtitle_friendly": "Use concise French subtitle phrasing. Prefer short clauses and avoid heavy subordinate structures.",
+    },
+    "de": {
+        "natural_conversational": "Use natural contemporary German. Keep dialogue fluent and avoid overly long compound-heavy phrasing.",
+        "formal": "Use polished formal German with appropriate Sie/register when context requires it.",
+        "literal": "Stay close to the source meaning while keeping German word order natural.",
+        "subtitle_friendly": "Use concise German subtitle phrasing. Split heavy ideas into readable short clauses.",
+    },
+    "it": {
+        "natural_conversational": "Use natural contemporary Italian. Keep dialogue fluent, idiomatic, and character-appropriate.",
+        "formal": "Use polished formal Italian. Keep it clear and subtitle-readable.",
+        "literal": "Stay close to the source meaning while preserving natural Italian flow.",
+        "subtitle_friendly": "Use concise Italian subtitle phrasing. Prefer direct wording and avoid unnecessary filler.",
+    },
+    "pt": {
+        "natural_conversational": "Use natural conversational Portuguese. Prefer neutral phrasing unless the context clearly suggests a regional variety.",
+        "formal": "Use polished formal Portuguese. Keep it respectful and clear.",
+        "literal": "Stay close to the source meaning while avoiding awkward source-language structures.",
+        "subtitle_friendly": "Use concise Portuguese subtitle phrasing. Prefer short, readable sentences.",
+    },
+    "ru": {
+        "natural_conversational": "Use natural contemporary Russian. Preserve tone and emotion without stiff literal phrasing.",
+        "formal": "Use polished formal Russian with clear respectful phrasing.",
+        "literal": "Stay close to the source meaning while keeping Russian grammar and aspect natural.",
+        "subtitle_friendly": "Use concise Russian subtitle phrasing. Avoid overly long clauses and keep lines readable.",
+    },
+    "ja": {
+        "natural_conversational": "Use natural Japanese subtitle dialogue. Preserve politeness level, character voice, and implied subjects where natural.",
+        "formal": "Use polished formal Japanese with appropriate desu/masu politeness or respectful register based on context.",
+        "literal": "Stay close to the source meaning while avoiding unnatural direct translations into Japanese.",
+        "subtitle_friendly": "Use concise Japanese subtitle phrasing. Avoid unnecessary spaces, long explanations, and over-explicit subjects.",
+    },
+    "ko": {
+        "natural_conversational": "Use natural Korean subtitle dialogue. Preserve politeness level and character relationship cues.",
+        "formal": "Use polished formal Korean with appropriate honorifics and speech level.",
+        "literal": "Stay close to the source meaning while keeping Korean sentence endings natural.",
+        "subtitle_friendly": "Use concise Korean subtitle phrasing. Avoid unnecessary spaces, filler, and overlong endings.",
+    },
+    "zh": {
+        "natural_conversational": "Use natural Simplified Chinese subtitle dialogue unless the source clearly calls for names or terms to remain unchanged.",
+        "formal": "Use polished formal Chinese. Keep it clear, modern, and subtitle-readable.",
+        "literal": "Stay close to the source meaning while avoiding awkward translated syntax.",
+        "subtitle_friendly": "Use concise Chinese subtitle phrasing. Avoid unnecessary spaces and keep lines short.",
+    },
+}
 
 
 @dataclass
@@ -66,10 +147,19 @@ def build_format_instruction(target_language: str) -> str:
     )
 
 
+def build_language_style_guidance(target_language: str, style: str) -> str:
+    code = LANGUAGE_CODES.get(normalize_language(target_language))
+    guidance = LANGUAGE_STYLE_GUIDANCE.get(code, {})
+    return guidance.get(style) or guidance.get("natural_conversational") or (
+        f"Use natural, fluent {target_language}. Match the requested style while keeping subtitles concise and readable."
+    )
+
+
 def build_persian_prompt(
     joined_blocks: str,
     source_instruction: str,
     style_instruction: str,
+    language_style_guidance: str,
     format_instruction: str,
     force_persian: bool,
 ) -> str:
@@ -83,6 +173,7 @@ def build_persian_prompt(
     return f"""
 تو مترجم حرفه‌ای زیرنویس هستی.
 {source_instruction}
+Language/style guidance: {language_style_guidance}
 هدف: فارسی محاوره‌ای با خط فارسی.
 لحن: کوتاه، دقیق، امانت‌دار، طبیعی و بدون سانسور. {style_instruction}
 قالب‌بندی: {format_instruction}
@@ -100,6 +191,7 @@ def build_universal_prompt(
     target_language: str,
     source_instruction: str,
     style_instruction: str,
+    language_style_guidance: str,
     format_instruction: str,
 ) -> str:
     return f"""
@@ -107,6 +199,7 @@ You are a professional subtitle translator.
 {source_instruction}
 Target: {target_language}.
 Style: short, accurate, faithful, natural, uncensored dialogue. {style_instruction}
+Language/style guidance: {language_style_guidance}
 Formatting: {format_instruction}
 
 Strict rules: translate each BEGIN/END item independently using only that item's text. Never borrow from neighboring items, merge, move, skip, or add items. If an item is incomplete, translate only that fragment; do not complete it. Keep names, numbers, tags, and punctuation intent. If multiple subtitle lines are needed, use {LINE_BREAK_TOKEN} instead of a line break inside the translated text. Return only BEGIN[i] ... END[i] blocks with the same indexes; no text outside blocks.
@@ -129,6 +222,7 @@ def build_batch_prompt(
     else:
         style_instruction = build_style_instruction(style, target_language)
 
+    language_style_guidance = build_language_style_guidance(target_language, style)
     format_instruction = build_format_instruction(target_language)
     blocks = [
         f"BEGIN[{item['index']}]\n{item['text']}\nEND[{item['index']}]"
@@ -148,6 +242,7 @@ def build_batch_prompt(
             joined_blocks=joined_blocks,
             source_instruction=persian_source_instruction,
             style_instruction=style_instruction,
+            language_style_guidance=language_style_guidance,
             format_instruction=format_instruction,
             force_persian=force_persian,
         )
@@ -157,6 +252,7 @@ def build_batch_prompt(
         target_language=target_language,
         source_instruction=english_source_instruction,
         style_instruction=style_instruction,
+        language_style_guidance=language_style_guidance,
         format_instruction=format_instruction,
     )
 
