@@ -15,6 +15,8 @@ CJK_BREAK_RE = re.compile(r"([。！？!?；;，,、])")
 RTL_LANGUAGE_CODES = {"fa", "ar", "ur", "he"}
 CJK_LANGUAGE_CODES = {"zh", "ja", "ko"}
 DEVANAGARI_LANGUAGE_CODES = {"hi", "ur"}
+RTL_EMBEDDING_MARK = "\u202b"
+POP_DIRECTIONAL_FORMATTING = "\u202c"
 
 
 def text_profile(text: str, language: str | None = None) -> str:
@@ -89,11 +91,18 @@ def clean_subtitle_text(text: str) -> str:
 
 def normalize_punctuation_spacing(text: str, language: str | None = None) -> str:
     profile = text_profile(text, language)
+    code = language_code(language)
 
     lines = []
     for line in text.split("\n"):
         line = re.sub(r"[ \t]+", " ", line).strip()
         line = re.sub(r"\s+([,.;:!?،؛؟。！？、])", r"\1", line)
+
+        if profile == "rtl":
+            line = line.replace("?", "؟").replace(";", "؛")
+
+            if code in {"fa", "ar", "ur"}:
+                line = re.sub(r"(?<=\S),(?=\s|$)", "،", line)
 
         if profile == "cjk":
             line = re.sub(r"([\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF])\s+([\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF])", r"\1\2", line)
@@ -102,6 +111,26 @@ def normalize_punctuation_spacing(text: str, language: str | None = None) -> str
         lines.append(line)
 
     return "\n".join(lines).strip()
+
+
+def apply_rtl_direction_marks(text: str, language: str | None = None) -> str:
+    if text_profile(text, language) != "rtl":
+        return text
+
+    marked_lines = []
+
+    for line in text.split("\n"):
+        cleaned = line.strip()
+
+        if not cleaned:
+            continue
+
+        if cleaned.startswith(RTL_EMBEDDING_MARK) and cleaned.endswith(POP_DIRECTIONAL_FORMATTING):
+            marked_lines.append(cleaned)
+        else:
+            marked_lines.append(f"{RTL_EMBEDDING_MARK}{cleaned}{POP_DIRECTIONAL_FORMATTING}")
+
+    return "\n".join(marked_lines)
 
 
 def subtitle_line_limit(language: str | None, text: str = "") -> int:
@@ -212,7 +241,7 @@ def wrap_subtitle_text(text: str, language: str | None = None) -> str:
         else:
             wrapped_lines.extend(split_spaced_line(line, limit))
 
-    return "\n".join(wrapped_lines)
+    return apply_rtl_direction_marks("\n".join(wrapped_lines), language)
 
 
 def make_output_filename(input_filename: str, target_language: str) -> str:

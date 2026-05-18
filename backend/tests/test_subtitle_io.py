@@ -7,6 +7,10 @@ from app.services.subtitle_io import (
 )
 
 
+def without_direction_marks(text: str) -> str:
+    return text.replace("\u202b", "").replace("\u202c", "")
+
+
 def make_sub(text: str):
     return pysrt.SubRipItem(index=1, text=text)
 
@@ -55,7 +59,22 @@ def test_wrap_rtl_removes_bad_punctuation_spacing():
 
     assert " ؟" not in wrapped
     assert " ." not in wrapped
-    assert all(len(line) <= 38 for line in wrapped.splitlines())
+    visible_wrapped = without_direction_marks(wrapped)
+
+    assert all(line.startswith("\u202b") and line.endswith("\u202c") for line in wrapped.splitlines())
+    assert all(len(line) <= 38 for line in visible_wrapped.splitlines())
+
+
+def test_wrap_rtl_converts_common_ascii_punctuation():
+    wrapped = wrap_subtitle_text("مرحبا, كيف الحال? جيد; نعم.", "Arabic")
+    visible_wrapped = without_direction_marks(wrapped)
+
+    assert "؟" in visible_wrapped
+    assert "،" in visible_wrapped
+    assert "؛" in visible_wrapped
+    assert "?" not in visible_wrapped
+    assert "," not in visible_wrapped
+    assert ";" not in visible_wrapped
 
 
 def test_wrap_long_unspaced_text_has_no_extreme_line():

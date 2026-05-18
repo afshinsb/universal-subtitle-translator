@@ -10,10 +10,10 @@ LINE_BREAK_TOKEN = "<LB>"
 
 LANGUAGE_STYLE_GUIDANCE = {
     "fa": {
-        "natural_conversational": "Use contemporary, conversational Persian in Persian script. Keep dialogue idiomatic, fluent, and emotionally natural; avoid stiff word-for-word phrasing.",
-        "formal": "Use polished, respectful Persian in Persian script. Keep it fluent and readable, not archaic or bureaucratic.",
-        "literal": "Stay close to the source meaning and ordering where possible, but still write grammatical Persian in Persian script.",
-        "subtitle_friendly": "Use concise Persian subtitle phrasing in Persian script. Prefer short, direct sentences and avoid over-explaining.",
+        "natural_conversational": "Use contemporary, conversational Persian in Persian script. Keep dialogue idiomatic, fluent, and emotionally natural; avoid stiff word-for-word phrasing. Use RTL punctuation such as ؟،؛ where appropriate.",
+        "formal": "Use polished, respectful Persian in Persian script. Keep it fluent and readable, not archaic or bureaucratic. Use RTL punctuation such as ؟،؛ where appropriate.",
+        "literal": "Stay close to the source meaning and ordering where possible, but still write grammatical Persian in Persian script. Use RTL punctuation such as ؟،؛ where appropriate.",
+        "subtitle_friendly": "Use concise Persian subtitle phrasing in Persian script. Prefer short, direct sentences and avoid over-explaining. Use RTL punctuation such as ؟،؛ where appropriate.",
     },
     "en": {
         "natural_conversational": "Use natural spoken English. Prefer contractions and everyday phrasing when they fit the character and scene.",
@@ -22,10 +22,10 @@ LANGUAGE_STYLE_GUIDANCE = {
         "subtitle_friendly": "Use compact English subtitle phrasing. Prefer short clauses, direct verbs, and readable timing.",
     },
     "ar": {
-        "natural_conversational": "Use clear modern Arabic that feels natural in subtitles. Avoid overly literal calques and keep punctuation RTL-friendly.",
-        "formal": "Use polished Modern Standard Arabic. Keep it accessible for subtitles, not ornate or classical.",
-        "literal": "Stay close to the source meaning while preserving natural Arabic grammar and punctuation.",
-        "subtitle_friendly": "Use concise Arabic subtitles with short readable lines and natural RTL punctuation spacing.",
+        "natural_conversational": "Use clear modern Arabic that feels natural in subtitles. Avoid overly literal calques and use RTL punctuation such as ؟،؛ where appropriate.",
+        "formal": "Use polished Modern Standard Arabic. Keep it accessible for subtitles, not ornate or classical. Use RTL punctuation such as ؟،؛ where appropriate.",
+        "literal": "Stay close to the source meaning while preserving natural Arabic grammar and RTL punctuation such as ؟،؛.",
+        "subtitle_friendly": "Use concise Arabic subtitles with short readable lines and natural RTL punctuation such as ؟،؛.",
     },
     "tr": {
         "natural_conversational": "Use natural contemporary Turkish. Preserve conversational tone, particles, and politeness naturally.",
@@ -142,7 +142,7 @@ def build_format_instruction(target_language: str) -> str:
     return (
         "For multi-line subtitles, use only the <LB> token. Keep lines short and readable. "
         "For Chinese, Japanese, and Korean, do not insert unnatural spaces between characters. "
-        "For Arabic, Persian, Hebrew, Urdu, and other RTL text, keep natural punctuation spacing. "
+        "For Arabic, Persian, Hebrew, Urdu, and other RTL text, keep natural punctuation spacing and use RTL punctuation marks such as ؟،؛ when appropriate. "
         "Never change indexes or timing; translate text only."
     )
 
