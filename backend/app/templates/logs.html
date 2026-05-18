@@ -12,14 +12,16 @@
                 <div class="brand-title">{{ page_title }}</div>
                 <div class="brand-subtitle">Activity, warnings, errors, provider usage, and cleanup events</div>
             </div>
+            {% include "_mobile_menu_button.html" %}
             <nav class="nav">
                 <a href="/">Home</a>
                 <a href="/batches">Batch</a>
+                <a href="/outputs">Outputs</a>
                 <a href="/about">About</a>
                 <a class="active" href="/logs">Logs</a>
                 <a href="/settings">Settings</a>
-                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
                 {% include "_auth_nav.html" %}
+                {% include "_mode_controls.html" %}
             </nav>
         </header>
 

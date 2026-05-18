@@ -91,8 +91,28 @@ a {
     flex-wrap: wrap;
 }
 
+.menu-toggle {
+    display: none;
+    width: 42px;
+    min-height: 38px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-direction: column;
+    padding: 0;
+}
+
+.menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+}
+
 .nav a,
 .theme-toggle,
+.ui-mode-toggle,
 .button,
 button {
     min-height: 38px;
@@ -120,8 +140,51 @@ button:hover {
     color: var(--text);
 }
 
-.theme-toggle {
+.theme-toggle,
+.ui-mode-toggle {
     white-space: nowrap;
+}
+
+.mode-controls {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-2);
+}
+
+.mode-controls .theme-toggle,
+.mode-controls .ui-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.mode-controls .theme-toggle::before,
+.mode-controls .ui-mode-toggle::before {
+    content: "";
+    width: 26px;
+    height: 15px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface-3);
+    box-shadow: inset 10px 0 0 var(--muted);
+}
+
+.mode-controls .theme-toggle[aria-pressed="true"]::before,
+.mode-controls .ui-mode-toggle[aria-pressed="true"]::before {
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-3));
+    box-shadow: inset -10px 0 0 var(--accent);
+}
+
+.mode-controls .theme-toggle {
+    border-left: 1px solid var(--line);
 }
 
 .session-chip {
@@ -255,6 +318,14 @@ h2 {
     grid-template-columns: minmax(280px, 1fr) minmax(190px, 240px);
     gap: 16px;
     align-items: end;
+}
+
+.source-language-field {
+    display: none;
+}
+
+.minimal-heading {
+    display: none;
 }
 
 .batch-translate-grid {
@@ -1182,6 +1253,261 @@ code {
     color: var(--accent);
 }
 
+:root[data-ui-mode="minimal"] .app-shell {
+    width: min(920px, calc(100% - 28px));
+    padding: 14px 0 24px;
+}
+
+:root[data-ui-mode="minimal"] .topbar {
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+:root[data-ui-mode="minimal"] .brand-subtitle,
+:root[data-ui-mode="minimal"] .minimal-extra,
+:root[data-ui-mode="minimal"] .minimal-hidden,
+:root[data-ui-mode="minimal"] .eyebrow,
+:root[data-ui-mode="minimal"] .home-hero,
+:root[data-ui-mode="minimal"] .footer-copy,
+:root[data-ui-mode="minimal"] .job-model,
+:root[data-ui-mode="minimal"] .session-chip {
+    display: none;
+}
+
+:root[data-ui-mode="minimal"] .minimal-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+:root[data-ui-mode="minimal"] .minimal-heading h1 {
+    margin: 0;
+}
+
+:root[data-ui-mode="minimal"] .brand-title {
+    font-size: 16px;
+}
+
+:root[data-ui-mode="minimal"] .nav {
+    gap: 6px;
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/about"],
+:root[data-ui-mode="minimal"] .nav a[href="/settings"],
+:root[data-ui-mode="minimal"] .nav a[href="/logs"] {
+    width: 34px;
+    overflow: hidden;
+    color: transparent;
+    position: relative;
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/about"]::after,
+:root[data-ui-mode="minimal"] .nav a[href="/settings"]::after,
+:root[data-ui-mode="minimal"] .nav a[href="/logs"]::after {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/about"]::after {
+    content: "?";
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/settings"]::after {
+    content: "S";
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/logs"]::after {
+    content: "L";
+}
+
+:root[data-ui-mode="minimal"] .nav a,
+:root[data-ui-mode="minimal"] .theme-toggle,
+:root[data-ui-mode="minimal"] .ui-mode-toggle,
+:root[data-ui-mode="minimal"] .button,
+:root[data-ui-mode="minimal"] button {
+    min-height: 36px;
+    padding: 7px 11px;
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="/about"],
+:root[data-ui-mode="minimal"] .nav a[href="/settings"],
+:root[data-ui-mode="minimal"] .nav a[href="/logs"],
+:root[data-ui-mode="minimal"] .footer-links {
+    opacity: 0.68;
+}
+
+:root[data-ui-mode="minimal"] .panel,
+:root[data-ui-mode="minimal"] .card,
+:root[data-ui-mode="minimal"] .log-metric {
+    box-shadow: none;
+    padding: 14px;
+    margin-bottom: 10px;
+}
+
+:root[data-ui-mode="minimal"] .primary-panel {
+    padding: 16px;
+}
+
+:root[data-ui-mode="minimal"] .panel-heading,
+:root[data-ui-mode="minimal"] .section-heading,
+:root[data-ui-mode="minimal"] .page-header,
+:root[data-ui-mode="minimal"] .warning-stack,
+:root[data-ui-mode="minimal"] .log-hero {
+    margin-bottom: 10px;
+}
+
+:root[data-ui-mode="minimal"] h1 {
+    margin-bottom: 6px;
+}
+
+:root[data-ui-mode="minimal"] h2 {
+    margin-bottom: 8px;
+}
+
+:root[data-ui-mode="minimal"] input,
+:root[data-ui-mode="minimal"] select,
+:root[data-ui-mode="minimal"] .toggle {
+    min-height: 40px;
+    padding: 8px 10px;
+}
+
+:root[data-ui-mode="minimal"] .file-picker input[type="file"] {
+    min-height: 42px;
+    padding: 8px;
+}
+
+:root[data-ui-mode="minimal"] .hero-action {
+    min-height: 44px;
+}
+
+:root[data-ui-mode="minimal"] .home-translate-grid,
+:root[data-ui-mode="minimal"] .batch-translate-grid,
+:root[data-ui-mode="minimal"] .advanced-grid,
+:root[data-ui-mode="minimal"] .grid,
+:root[data-ui-mode="minimal"] .summary,
+:root[data-ui-mode="minimal"] .meta,
+:root[data-ui-mode="minimal"] .actions,
+:root[data-ui-mode="minimal"] .recent-grid,
+:root[data-ui-mode="minimal"] .log-console,
+:root[data-ui-mode="minimal"] .timeline {
+    gap: 8px;
+}
+
+:root[data-ui-mode="minimal"] .home-translate-grid {
+    grid-template-columns: minmax(260px, 1fr) minmax(190px, 240px);
+}
+
+:root[data-ui-mode="minimal"] .source-language-field {
+    display: block;
+}
+
+:root[data-ui-mode="minimal"] #single-submit {
+    width: 100%;
+}
+
+:root[data-ui-mode="minimal"] .actions {
+    margin-top: 10px;
+}
+
+:root[data-ui-mode="minimal"] .actions > * {
+    flex-basis: 150px;
+}
+
+:root[data-ui-mode="minimal"] .advanced-options {
+    margin-top: 10px;
+}
+
+:root[data-ui-mode="minimal"] .advanced-options summary {
+    font-size: 13px;
+}
+
+:root[data-ui-mode="minimal"] .recent-grid {
+    grid-template-columns: 1fr;
+}
+
+:root[data-ui-mode="minimal"] .recent-grid .quiet-panel:first-child {
+    display: block;
+}
+
+:root[data-ui-mode="minimal"] .recent-grid .quiet-panel:last-child {
+    display: block;
+}
+
+:root[data-ui-mode="minimal"] .quiet-panel {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--line) 70%, transparent);
+    padding: 10px 0;
+}
+
+:root[data-ui-mode="minimal"] .recent-item {
+    min-height: 42px;
+    padding: 6px 0;
+}
+
+:root[data-ui-mode="minimal"] .metric {
+    min-width: 112px;
+    padding: 10px;
+}
+
+:root[data-ui-mode="minimal"] .metric strong,
+:root[data-ui-mode="minimal"] .log-metric strong {
+    font-size: 20px;
+}
+
+:root[data-ui-mode="minimal"] .progress-wrapper {
+    height: 22px;
+    margin-top: 10px;
+}
+
+:root[data-ui-mode="minimal"] .progress-wrapper .progress-bar {
+    line-height: 22px;
+}
+
+:root[data-ui-mode="minimal"] .total-track {
+    height: 26px;
+    margin-top: 10px;
+}
+
+:root[data-ui-mode="minimal"] .total-track .progress-fill,
+:root[data-ui-mode="minimal"] .total-track .progress-bar {
+    line-height: 26px;
+}
+
+:root[data-ui-mode="minimal"] .log-hero {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+:root[data-ui-mode="minimal"] .log-filter-bar {
+    box-shadow: none;
+    padding: 10px;
+}
+
+:root[data-ui-mode="minimal"] .log-entry-main,
+:root[data-ui-mode="minimal"] .notice,
+:root[data-ui-mode="minimal"] .feature-item,
+:root[data-ui-mode="minimal"] .readiness-item,
+:root[data-ui-mode="minimal"] .about-meta > div,
+:root[data-ui-mode="minimal"] .empty-state {
+    padding: 10px;
+}
+
+:root[data-ui-mode="minimal"] .site-footer {
+    padding-top: 10px;
+    font-size: 12px;
+}
+
+@media (max-width: 700px) {
+    :root[data-ui-mode="minimal"] .home-translate-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 900px) {
     .app-shell {
         width: min(100% - 28px, 1180px);
@@ -1189,8 +1515,65 @@ code {
     }
 
     .topbar {
-        align-items: flex-start;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+    }
+
+    .menu-toggle {
+        display: inline-flex;
+    }
+
+    .nav {
+        display: none;
+        grid-column: 1 / -1;
+        width: 100%;
+        align-items: stretch;
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+    }
+
+    .topbar.nav-open .nav {
+        display: flex;
+    }
+
+    .nav a,
+    .nav button,
+    .nav .nav-logout-form,
+    .nav .mode-controls {
+        width: 100%;
+    }
+
+    .nav a,
+    .nav button {
+        justify-content: center;
+        text-align: center;
+    }
+
+    .mode-controls {
+        margin-left: 0;
+    }
+
+    .mode-controls .theme-toggle,
+    .mode-controls .ui-mode-toggle {
+        flex: 1 1 0;
+        justify-content: center;
+    }
+
+    :root[data-ui-mode="minimal"] .nav a[href="/about"],
+    :root[data-ui-mode="minimal"] .nav a[href="/settings"],
+    :root[data-ui-mode="minimal"] .nav a[href="/logs"] {
+        width: 100%;
+        color: var(--text);
+    }
+
+    :root[data-ui-mode="minimal"] .nav a[href="/about"]::after,
+    :root[data-ui-mode="minimal"] .nav a[href="/settings"]::after,
+    :root[data-ui-mode="minimal"] .nav a[href="/logs"]::after {
+        content: none;
     }
 
     .site-footer {

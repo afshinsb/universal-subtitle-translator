@@ -12,15 +12,17 @@
                 <div class="brand-title">Translation Progress</div>
                 <div class="brand-subtitle">{{ job.input_file }}</div>
             </div>
+            {% include "_mobile_menu_button.html" %}
             <nav class="nav">
                 <a href="/">Home</a>
                 <a href="/batches">Batch</a>
+                <a href="/outputs">Outputs</a>
                 <a href="/about">About</a>
                 <a href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
                 <a href="/jobs/{{ job.id }}/logs">This Job Logs</a>
-                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
                 {% include "_auth_nav.html" %}
+                {% include "_mode_controls.html" %}
             </nav>
         </header>
 
@@ -40,10 +42,10 @@
                 </div>
             </div>
 
-            <p class="muted"><strong>Input:</strong> <span id="input-file">{{ job.input_file }}</span></p>
-            <p class="muted"><strong>Output:</strong> <span id="output-file">{{ job.output_file or "-" }}</span></p>
-            <p class="muted"><strong>Message:</strong> <span id="message">{{ job.message }}</span></p>
-            <p class="muted"><strong>Model:</strong> <span id="model">{{ job.model }}</span></p>
+            <p class="muted job-detail"><strong>Input:</strong> <span id="input-file">{{ job.input_file }}</span></p>
+            <p class="muted job-detail"><strong>Output:</strong> <span id="output-file">{{ job.output_file or "-" }}</span></p>
+            <p class="muted job-detail"><strong>Message:</strong> <span id="message">{{ job.message }}</span></p>
+            <p class="muted job-detail job-model"><strong>Model:</strong> <span id="model">{{ job.model }}</span></p>
 
             <div class="actions">
                 <button type="button" class="secondary" id="copy-logs-button">Copy logs</button>

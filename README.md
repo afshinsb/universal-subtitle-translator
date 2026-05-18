@@ -8,7 +8,7 @@
 
 A full-stack subtitle automation tool for translating SRT files and media folders into Persian and other languages.
 
-Current version: `1.4.0`
+Current version: `1.5`
 
 ## Features
 
@@ -95,7 +95,7 @@ OPENAI_API_KEY=REPLACE_YOUR_API_WITH_THIS_TEXT
 
 Useful settings:
 
-- `APP_VERSION`: semantic application version, current `1.4.0`.
+- `APP_VERSION`: semantic application version, current `1.5`.
 - `DEMO_MODE`: public demo marker, default `false`. The production Docker app still requires the backend for real translations.
 - `OPENAI_MODEL`: translation model.
 - `APP_PORT`: backend and public Docker Compose port, default `2288`.
@@ -220,7 +220,7 @@ Portainer stack example:
 ```yaml
 services:
   backend:
-    image: YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:1.4.0
+    image: YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:1.5
     environment:
       MEDIA_ROOT: /media
       OUTPUT_DIR: /app/data/outputs
@@ -235,7 +235,7 @@ Build and publish the two runtime images with your Docker Hub namespace:
 
 ```bash
 docker login
-APP_VERSION=1.4.0
+APP_VERSION=1.5
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:latest ./backend
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:latest ./frontend
 docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION}
@@ -247,7 +247,7 @@ docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:lates
 On a server that should pull images instead of building them locally, use:
 
 ```bash
-DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.4.0 docker compose -f docker-compose.hub.yml up -d
+DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.5 docker compose -f docker-compose.hub.yml up -d
 ```
 
 ## Releases
@@ -261,7 +261,7 @@ This project uses semantic versioning: `MAJOR.MINOR.PATCH`.
 For a release, update `VERSION`, `APP_VERSION` in `.env.example`, and any README version examples to the same value. Commit the change, then create a matching Git tag:
 
 ```bash
-APP_VERSION=1.4.0
+APP_VERSION=1.5
 git add VERSION .env.example README.md docker-compose.yml docker-compose.hub.yml backend/app/config.py
 git commit -m "Release v${APP_VERSION}"
 git tag -a "v${APP_VERSION}" -m "Release v${APP_VERSION}"

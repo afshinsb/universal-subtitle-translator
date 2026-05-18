@@ -68,6 +68,21 @@ def about_page(request: Request):
     )
 
 
+@router.get("/outputs")
+def outputs_page(request: Request):
+    outputs = [
+        job
+        for job in list_jobs(limit=100)
+        if job.get("status") == "done" and job.get("output_file")
+    ]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="outputs.html",
+        context={"outputs": outputs},
+    )
+
+
 @router.post("/jobs")
 async def create_translation_job(
     file: UploadFile = File(...),

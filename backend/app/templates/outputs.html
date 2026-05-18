@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Outputs</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-title">Outputs</div>
+                <div class="brand-subtitle">Finished subtitle translations</div>
+            </div>
+            {% include "_mobile_menu_button.html" %}
+            <nav class="nav">
+                <a href="/">Home</a>
+                <a href="/batches">Batch</a>
+                <a class="active" href="/outputs">Outputs</a>
+                <a href="/about">About</a>
+                <a href="/settings">Settings</a>
+                <a href="/logs">Logs</a>
+                {% include "_auth_nav.html" %}
+                {% include "_mode_controls.html" %}
+            </nav>
+        </header>
+
+        <section class="page-header minimal-extra">
+            <div class="eyebrow">Recent Results</div>
+            <h1>Translated outputs</h1>
+            <p class="lead">Finished single-file translations appear here with links back to their job details and download.</p>
+        </section>
+
+        <section class="panel">
+            <div class="minimal-heading">
+                <h1>Outputs</h1>
+            </div>
+
+            {% if outputs %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Output</th>
+                                <th>Source</th>
+                                <th>Language</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for output in outputs %}
+                                <tr>
+                                    <td class="path">{{ output.output_file }}</td>
+                                    <td class="path">{{ output.input_file }}</td>
+                                    <td>{{ output.source_language }} &rarr; {{ output.target_language }}</td>
+                                    <td><span class="status {{ output.status }}">{{ output.status }}</span></td>
+                                    <td>
+                                        <div class="toolbar-actions">
+                                            <a class="button primary" href="/jobs/{{ output.id }}/download">Download</a>
+                                            <a class="button secondary" href="/jobs/{{ output.id }}">Job</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty-state">No translated outputs yet.</div>
+            {% endif %}
+        </section>
+
+        {% include "_footer.html" %}
+    </main>
+</body>
+</html>

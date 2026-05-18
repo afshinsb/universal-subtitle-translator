@@ -1,6 +1,7 @@
 (function () {
     const root = document.documentElement;
     const savedTheme = localStorage.getItem("theme") || "dark";
+    const savedUiMode = localStorage.getItem("uiMode") || "default";
 
     function applyTheme(theme) {
         const nextTheme = theme === "light" ? "light" : "dark";
@@ -8,8 +9,32 @@
         localStorage.setItem("theme", nextTheme);
 
         for (const button of document.querySelectorAll("[data-theme-toggle]")) {
-            button.textContent = nextTheme === "dark" ? "Dark mode" : "Light mode";
+            button.textContent = "Light";
+            button.setAttribute("aria-pressed", nextTheme === "light" ? "true" : "false");
             button.setAttribute("aria-label", `Switch to ${nextTheme === "dark" ? "light" : "dark"} mode`);
+        }
+    }
+
+    function applyUiMode(mode) {
+        const nextMode = mode === "minimal" ? "minimal" : "default";
+        root.dataset.uiMode = nextMode;
+        localStorage.setItem("uiMode", nextMode);
+
+        for (const button of document.querySelectorAll("[data-ui-mode-toggle]")) {
+            button.textContent = "Minimal";
+            button.setAttribute("aria-pressed", nextMode === "minimal" ? "true" : "false");
+            button.setAttribute("aria-label", `Switch to ${nextMode === "minimal" ? "full" : "minimal"} UI`);
+        }
+    }
+
+    function closeMobileNav() {
+        for (const header of document.querySelectorAll(".topbar")) {
+            header.classList.remove("nav-open");
+        }
+
+        for (const button of document.querySelectorAll("[data-menu-toggle]")) {
+            button.setAttribute("aria-expanded", "false");
+            button.setAttribute("aria-label", "Open navigation");
         }
     }
 
@@ -70,9 +95,11 @@
     };
 
     applyTheme(savedTheme);
+    applyUiMode(savedUiMode);
 
     document.addEventListener("DOMContentLoaded", () => {
         applyTheme(localStorage.getItem("theme") || "dark");
+        applyUiMode(localStorage.getItem("uiMode") || "default");
 
         for (const button of document.querySelectorAll("[data-theme-toggle]")) {
             button.addEventListener("click", () => {
@@ -80,5 +107,31 @@
             });
         }
 
+        for (const button of document.querySelectorAll("[data-ui-mode-toggle]")) {
+            button.addEventListener("click", () => {
+                applyUiMode(root.dataset.uiMode === "minimal" ? "default" : "minimal");
+            });
+        }
+
+        for (const button of document.querySelectorAll("[data-menu-toggle]")) {
+            const header = button.closest(".topbar");
+
+            button.addEventListener("click", () => {
+                const isOpen = !header.classList.contains("nav-open");
+                header.classList.toggle("nav-open", isOpen);
+                button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+                button.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+            });
+        }
+
+        for (const link of document.querySelectorAll(".nav a")) {
+            link.addEventListener("click", closeMobileNav);
+        }
+
+        window.addEventListener("resize", () => {
+            if (window.innerWidth > 900) {
+                closeMobileNav();
+            }
+        });
     });
 })();

@@ -12,21 +12,23 @@
                 <div class="brand-title">Batch Translation</div>
                 <div class="brand-subtitle">Translate a folder of movies or shows</div>
             </div>
+            {% include "_mobile_menu_button.html" %}
             <nav class="nav">
                 <a href="/">Home</a>
                 <a class="active" href="/batches">Batch</a>
+                <a href="/outputs">Outputs</a>
                 <a href="/about">About</a>
                 <a href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
-                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
                 {% include "_auth_nav.html" %}
+                {% include "_mode_controls.html" %}
             </nav>
         </header>
 
         <section class="page-header">
             <div class="eyebrow">Server Path Translation</div>
             <h1>Translate mounted media</h1>
-            <p class="lead">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
+            <p class="lead minimal-extra">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
         </section>
 
         {% include "_warnings.html" %}
@@ -43,9 +45,9 @@
                             {% endif %}
                         </div>
                         {% if media_root %}
-                            <p class="field-hint">Docker/server mode reads mounted paths directly. Enter a file or folder under <code>{{ media_root }}</code>, such as <code>{{ media_root }}/Shows</code>.</p>
+                            <p class="field-hint minimal-extra">Docker/server mode reads mounted paths directly. Enter a file or folder under <code>{{ media_root }}</code>, such as <code>{{ media_root }}/Shows</code>.</p>
                         {% else %}
-                            <p class="field-hint">In Docker or on a server, type the mounted container path manually, such as <code>/media/Shows</code> or <code>/media/Movie.mkv</code>.</p>
+                            <p class="field-hint minimal-extra">In Docker or on a server, type the mounted container path manually, such as <code>/media/Shows</code> or <code>/media/Movie.mkv</code>.</p>
                         {% endif %}
                     </div>
 
@@ -159,7 +161,7 @@
             </div>
         </section>
 
-        <section class="panel">
+        <section class="panel minimal-hidden">
             <h2>Recent Server Runs</h2>
             {% if batches %}
                 <div class="table-wrap">

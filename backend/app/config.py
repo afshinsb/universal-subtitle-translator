@@ -83,7 +83,7 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
 
 class Settings:
     app_name: str = env_value("APP_NAME", "Universal Subtitle Translator") or "Universal Subtitle Translator"
-    app_version: str = env_value("APP_VERSION", "1.4.0") or "1.4.0"
+    app_version: str = env_value("APP_VERSION", "1.5") or "1.5"
     demo_mode: bool = parse_bool_env("DEMO_MODE", False)
     app_host: str = env_value("APP_HOST", "0.0.0.0") or "0.0.0.0"
     app_port: int = parse_int_env("APP_PORT", 2288)

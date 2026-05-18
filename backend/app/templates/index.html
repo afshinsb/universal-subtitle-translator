@@ -12,14 +12,16 @@
                 <div class="brand-title">Subtitle Translator</div>
                 <div class="brand-subtitle">Clean subtitles for your library</div>
             </div>
+            {% include "_mobile_menu_button.html" %}
             <nav class="nav">
                 <a class="active" href="/">Home</a>
                 <a href="/batches">Batch</a>
+                <a href="/outputs">Outputs</a>
                 <a href="/about">About</a>
                 <a href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
-                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
                 {% include "_auth_nav.html" %}
+                {% include "_mode_controls.html" %}
             </nav>
         </header>
 
@@ -27,20 +29,24 @@
             <div>
                 <div class="eyebrow">Subtitle Translation</div>
                 <h1>Translate subtitles without the clutter.</h1>
-                <p class="lead">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
+                <p class="lead minimal-extra">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
             </div>
-            <a class="button secondary batch-link" href="/batches">Translate Mounted Media</a>
+            <a class="button secondary batch-link minimal-extra" href="/batches">Translate Mounted Media</a>
         </section>
 
         {% include "_warnings.html" %}
 
         <section class="panel primary-panel">
-            <div class="panel-heading">
+            <div class="panel-heading minimal-extra">
                 <div>
                     <h2>New Translation</h2>
-                    <p class="hint">Browser upload is for small SRT/video files only. For large videos, mount your media folder and use Batch mode with a path like /media/Movies.</p>
+                    <p class="hint minimal-extra">Browser upload is for small SRT/video files only. For large videos, mount your media folder and use Batch mode with a path like /media/Movies.</p>
                 </div>
                 <span class="pill">Upload limit: {{ max_upload_mb }} MB</span>
+            </div>
+
+            <div class="minimal-heading">
+                <h1>Translate</h1>
             </div>
 
             <form id="single-file-form" action="/jobs" method="post" enctype="multipart/form-data">
@@ -67,6 +73,13 @@
                             <input name="overwrite_existing" type="checkbox" value="true">
                             Overwrite existing subtitle
                         </label>
+
+                        <div class="source-language-field">
+                            <label>Source language</label>
+                            <select name="source_language" aria-label="Source language">
+                                <option value="Auto">Auto detect</option>
+                            </select>
+                        </div>
 
                         <div>
                             <label>Translation style</label>
@@ -106,7 +119,7 @@
             </form>
         </section>
 
-        <section class="recent-grid">
+        <section class="recent-grid minimal-hidden">
             <div class="panel quiet-panel">
                 <div class="section-heading">
                     <h2>Recent Outputs</h2>
