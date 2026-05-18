@@ -97,8 +97,8 @@ Useful settings:
 
 - `APP_VERSION`: semantic application version, current `1.3.0`.
 - `OPENAI_MODEL`: translation model.
-- `HOST_PORT`: public Docker Compose port on your machine, default `2288`.
-- `AUTH_ENABLED`: set to `true` to require admin login for the UI and API.
+- `APP_PORT`: backend and public Docker Compose port, default `2288`.
+- `AUTH_ENABLED`: admin login is enabled by default; set to `false` only for trusted local-only use.
 - `ADMIN_USERNAME`: admin login username.
 - `ADMIN_PASSWORD`: admin login password. Use a strong unique value.
 - `SESSION_SECRET`: random 32+ character value used to sign session cookies.
@@ -110,13 +110,15 @@ Useful settings:
 
 ## Authentication
 
-Authentication is off by default for trusted local use. To protect the UI and API, enable admin login in `.env`:
+Authentication is enabled by default, even if `.env` is missing. The default login is `admin` / `admin`.
+
+To customize it, set these values in `.env`:
 
 ```text
 AUTH_ENABLED=true
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=admin
-SESSION_SECRET=REPLACE_YOUR_SESSION_SECRET_WITH_THIS_TEXT
+SESSION_SECRET=default-insecure-session-secret-change-before-release
 ```
 
 Generate a session secret with:
@@ -127,7 +129,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Restart the app after changing auth settings. When enabled, all UI and API routes require login except `/login`, `/logout`, `/health`, and static assets used by the login page.
 
-The default login is `admin` / `admin`. The app will show a warning while the default password is still in use. Change `ADMIN_PASSWORD` before exposing the app beyond your own machine.
+The app will show warnings while the default password or default session secret is still in use. Change `ADMIN_PASSWORD` and `SESSION_SECRET` before exposing the app beyond your own machine.
 
 ## Batch Translation
 

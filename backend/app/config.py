@@ -36,6 +36,7 @@ SRT_MAX_CHARS_MIN = 500
 SRT_MAX_CHARS_MAX = 100000
 SRT_MAX_CHARS_RECOMMENDED_MIN = 2000
 SRT_MAX_CHARS_RECOMMENDED_MAX = 30000
+DEFAULT_SESSION_SECRET = "default-insecure-session-secret-change-before-release"
 
 
 def env_value(name: str, default: str | None = None) -> str | None:
@@ -102,10 +103,10 @@ class Settings:
 
     openai_api_key: str | None = env_value("OPENAI_API_KEY")
     openai_model: str = env_value("OPENAI_MODEL", "gpt-4o-mini") or ""
-    auth_enabled: bool = parse_bool_env("AUTH_ENABLED", False)
+    auth_enabled: bool = parse_bool_env("AUTH_ENABLED", True)
     admin_username: str = env_value("ADMIN_USERNAME", "admin") or "admin"
     admin_password: str | None = env_value("ADMIN_PASSWORD", "admin") or "admin"
-    session_secret: str | None = env_value("SESSION_SECRET")
+    session_secret: str | None = env_value("SESSION_SECRET", DEFAULT_SESSION_SECRET) or DEFAULT_SESSION_SECRET
 
     data_dir: Path = Path(env_value("DATA_DIR", str(BASE_DIR / "data")) or str(BASE_DIR / "data"))
     upload_dir: Path = Path(env_value("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")) or str(BASE_DIR / "data" / "uploads"))
@@ -232,7 +233,7 @@ def auth_config_checks() -> list[dict]:
                 "severity": "ok",
                 "blocking": False,
                 "message": "Authentication is disabled.",
-                "fix": "Set AUTH_ENABLED=true in .env to require login.",
+                "fix": "Remove AUTH_ENABLED=false or set AUTH_ENABLED=true in .env to require login.",
                 "value": "disabled",
             }
         ]
@@ -287,16 +288,25 @@ def auth_config_checks() -> list[dict]:
         }
     )
 
+    secret_is_default = settings.session_secret == DEFAULT_SESSION_SECRET
     secret_ok = bool(settings.session_secret) and not is_placeholder(settings.session_secret) and len(settings.session_secret or "") >= 32
     checks.append(
         {
             "id": "session_secret",
             "label": "Session secret",
-            "ok": secret_ok,
-            "severity": "ok" if secret_ok else "error",
+            "ok": secret_ok and not secret_is_default,
+            "severity": "warning" if secret_ok and secret_is_default else ("ok" if secret_ok else "error"),
             "blocking": not secret_ok,
-            "message": "SESSION_SECRET is configured." if secret_ok else "SESSION_SECRET is missing, too short, or still looks like a placeholder.",
-            "fix": "No action needed." if secret_ok else "Set SESSION_SECRET to a random 32+ character value in .env, then restart the app.",
+            "message": (
+                "SESSION_SECRET is still using the default development value."
+                if secret_ok and secret_is_default
+                else ("SESSION_SECRET is configured." if secret_ok else "SESSION_SECRET is missing, too short, or still looks like a placeholder.")
+            ),
+            "fix": (
+                "Set SESSION_SECRET to a random 32+ character value before exposing this app beyond your machine."
+                if secret_ok and secret_is_default
+                else ("No action needed." if secret_ok else "Set SESSION_SECRET to a random 32+ character value in .env, then restart the app.")
+            ),
             "value": "configured" if secret_ok else "missing",
         }
     )

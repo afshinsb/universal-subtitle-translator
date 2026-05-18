@@ -54,7 +54,7 @@ async def auth_middleware(request: Request, call_next):
 
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.session_secret or "auth-disabled-development-session-secret",
+    secret_key=settings.session_secret,
     session_cookie="ust_session",
     max_age=60 * 60 * 12,
     same_site="lax",
