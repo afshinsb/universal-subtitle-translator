@@ -23,6 +23,8 @@ PLACEHOLDER_VALUES = {
     "replace_your_api_with_this_text",
     "replace_your_api_key_here",
     "replace_with_your_openai_api_key",
+    "replace_your_password_with_this_text",
+    "replace_your_session_secret_with_this_text",
     "sk-your-api-key",
     "sk-...",
 }
@@ -69,9 +71,18 @@ def parse_float_env(name: str, default: float) -> float:
         return default
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    value = env_value(name)
+
+    if value in {None, ""}:
+        return default
+
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 class Settings:
     app_name: str = env_value("APP_NAME", "Universal Subtitle Translator") or "Universal Subtitle Translator"
-    app_version: str = env_value("APP_VERSION", "1.2.0") or "1.2.0"
+    app_version: str = env_value("APP_VERSION", "1.3.0") or "1.3.0"
     app_host: str = env_value("APP_HOST", "0.0.0.0") or "0.0.0.0"
     app_port: int = parse_int_env("APP_PORT", 2288)
 
@@ -91,6 +102,10 @@ class Settings:
 
     openai_api_key: str | None = env_value("OPENAI_API_KEY")
     openai_model: str = env_value("OPENAI_MODEL", "gpt-4o-mini") or ""
+    auth_enabled: bool = parse_bool_env("AUTH_ENABLED", False)
+    admin_username: str = env_value("ADMIN_USERNAME", "admin") or "admin"
+    admin_password: str | None = env_value("ADMIN_PASSWORD", "admin") or "admin"
+    session_secret: str | None = env_value("SESSION_SECRET")
 
     data_dir: Path = Path(env_value("DATA_DIR", str(BASE_DIR / "data")) or str(BASE_DIR / "data"))
     upload_dir: Path = Path(env_value("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")) or str(BASE_DIR / "data" / "uploads"))
@@ -205,6 +220,88 @@ def openai_api_key_state() -> tuple[bool, str, str, str]:
         "OpenAI API key is configured.",
         "No action needed.",
     )
+
+
+def auth_config_checks() -> list[dict]:
+    if not settings.auth_enabled:
+        return [
+            {
+                "id": "auth_enabled",
+                "label": "Authentication",
+                "ok": True,
+                "severity": "ok",
+                "blocking": False,
+                "message": "Authentication is disabled.",
+                "fix": "Set AUTH_ENABLED=true in .env to require login.",
+                "value": "disabled",
+            }
+        ]
+
+    checks = [
+        {
+            "id": "auth_enabled",
+            "label": "Authentication",
+            "ok": True,
+            "severity": "ok",
+            "blocking": False,
+            "message": "Authentication is enabled.",
+            "fix": "No action needed.",
+            "value": "enabled",
+        }
+    ]
+
+    username_ok = bool(settings.admin_username) and not is_placeholder(settings.admin_username)
+    checks.append(
+        {
+            "id": "admin_username",
+            "label": "Admin username",
+            "ok": username_ok,
+            "severity": "ok" if username_ok else "error",
+            "blocking": not username_ok,
+            "message": "ADMIN_USERNAME is configured." if username_ok else "ADMIN_USERNAME is missing or still looks like a placeholder.",
+            "fix": "No action needed." if username_ok else "Set ADMIN_USERNAME in .env, then restart the app.",
+            "value": "configured" if username_ok else "missing",
+        }
+    )
+
+    password_is_default = settings.admin_password == "admin"
+    password_ok = bool(settings.admin_password) and not is_placeholder(settings.admin_password)
+    checks.append(
+        {
+            "id": "admin_password",
+            "label": "Admin password",
+            "ok": password_ok and not password_is_default,
+            "severity": "warning" if password_ok and password_is_default else ("ok" if password_ok else "error"),
+            "blocking": not password_ok,
+            "message": (
+                "ADMIN_PASSWORD is still set to the default password."
+                if password_ok and password_is_default
+                else ("ADMIN_PASSWORD is configured." if password_ok else "ADMIN_PASSWORD is missing or still looks like a placeholder.")
+            ),
+            "fix": (
+                "Change ADMIN_PASSWORD in .env before exposing this app beyond your machine."
+                if password_ok and password_is_default
+                else ("No action needed." if password_ok else "Set ADMIN_PASSWORD in .env, then restart the app.")
+            ),
+            "value": "configured" if password_ok else "missing",
+        }
+    )
+
+    secret_ok = bool(settings.session_secret) and not is_placeholder(settings.session_secret) and len(settings.session_secret or "") >= 32
+    checks.append(
+        {
+            "id": "session_secret",
+            "label": "Session secret",
+            "ok": secret_ok,
+            "severity": "ok" if secret_ok else "error",
+            "blocking": not secret_ok,
+            "message": "SESSION_SECRET is configured." if secret_ok else "SESSION_SECRET is missing, too short, or still looks like a placeholder.",
+            "fix": "No action needed." if secret_ok else "Set SESSION_SECRET to a random 32+ character value in .env, then restart the app.",
+            "value": "configured" if secret_ok else "missing",
+        }
+    )
+
+    return checks
 
 
 def run_openai_api_key_test() -> None:
@@ -361,6 +458,7 @@ def check_int_setting(
 
 def config_status() -> dict:
     checks = []
+    checks.extend(auth_config_checks())
     api_key_ok, api_key_state, api_message, api_fix = openai_api_key_state()
     checks.append(
         {

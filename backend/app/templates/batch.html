@@ -19,6 +19,7 @@
                 <a href="/logs">Logs</a>
                 <a href="/batches/{{ batch.id }}/events">Events</a>
                 <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                {% include "_auth_nav.html" %}
             </nav>
         </header>
 
@@ -257,7 +258,7 @@
 
         async function pollStatus() {
             try {
-                const response = await fetch(`/batches/${batchId}/status`);
+                const response = await window.UST.authFetch(`/batches/${batchId}/status`);
                 const payload = await response.json();
                 render(payload);
 
@@ -295,7 +296,7 @@
             cancelButton.disabled = true;
             cancelButton.textContent = "Canceling...";
 
-            await fetch(`/batches/${batchId}/cancel`, { method: "POST" });
+            await window.UST.authFetch(`/batches/${batchId}/cancel`, { method: "POST" });
         });
 
         copyLogsButton.addEventListener("click", async () => {

@@ -19,6 +19,7 @@
                 <a href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
                 <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                {% include "_auth_nav.html" %}
             </nav>
         </header>
 
@@ -171,7 +172,7 @@
             singleSubmit.textContent = "Uploading...";
 
             try {
-                const response = await fetch("/jobs", {
+                const response = await window.UST.authFetch("/jobs", {
                     method: "POST",
                     body: new FormData(singleFileForm),
                     redirect: "follow",

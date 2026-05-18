@@ -19,6 +19,7 @@
                 <a href="/settings">Settings</a>
                 <a href="/logs">Logs</a>
                 <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
+                {% include "_auth_nav.html" %}
             </nav>
         </header>
 
@@ -330,7 +331,7 @@
         }
 
         async function pollScan(scanId) {
-            const response = await fetch(`/batches/scan/${scanId}`);
+            const response = await window.UST.authFetch(`/batches/scan/${scanId}`);
             const payload = await response.json();
 
             if (!response.ok || payload.error) {
@@ -390,7 +391,7 @@
 
             try {
                 setBusy(true, "Scanning...");
-                const response = await fetch("/batches/scan", {
+                const response = await window.UST.authFetch("/batches/scan", {
                     method: "POST",
                     body: new FormData(form),
                 });
@@ -416,7 +417,7 @@
             pickFolderButton.textContent = "Opening...";
 
             try {
-                const response = await fetch("/batches/pick-folder", { method: "POST" });
+                const response = await window.UST.authFetch("/batches/pick-folder", { method: "POST" });
                 const payload = await response.json();
 
                 if (!response.ok || payload.error) {
@@ -445,7 +446,7 @@
             cancelScanButton.textContent = "Canceling...";
             scanButtonLabel.textContent = "Canceling scan...";
 
-            await fetch(`/batches/scan/${currentScanId}/cancel`, { method: "POST" });
+            await window.UST.authFetch(`/batches/scan/${currentScanId}/cancel`, { method: "POST" });
         });
 
         form.addEventListener("submit", async (event) => {
@@ -462,7 +463,7 @@
             startButton.textContent = "Starting...";
 
             try {
-                const response = await fetch("/batches", {
+                const response = await window.UST.authFetch("/batches", {
                     method: "POST",
                     body: new FormData(form),
                     redirect: "follow",

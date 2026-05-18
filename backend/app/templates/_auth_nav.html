@@ -1,0 +1,9 @@
+{% if auth_enabled %}
+    {% set signed_in_user = current_username(request) %}
+    {% if signed_in_user %}
+        <span class="session-chip" title="Signed in">Signed in as {{ signed_in_user }}</span>
+        <form method="post" action="/logout" class="nav-logout-form">
+            <button type="submit" class="secondary nav-logout-button">Logout</button>
+        </form>
+    {% endif %}
+{% endif %}
