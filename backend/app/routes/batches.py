@@ -125,6 +125,8 @@ def public_scan_result(folder_path: str, target_language: str, scan_result: dict
                 "step": item["step"],
                 "total_subtitles": item["total_subtitles"],
                 "output_name": item["output_name"],
+                "output_location": item.get("output_location") or "source",
+                "output_note": item.get("output_note") or "",
             }
             for item in scan_result["items"]
         ],

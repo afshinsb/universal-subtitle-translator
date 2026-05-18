@@ -8,7 +8,7 @@
 
 A full-stack subtitle automation tool for translating SRT files and media folders into Persian and other languages.
 
-Current version: `1.3.0`
+Current version: `1.4.0`
 
 ## Features
 
@@ -95,7 +95,8 @@ OPENAI_API_KEY=REPLACE_YOUR_API_WITH_THIS_TEXT
 
 Useful settings:
 
-- `APP_VERSION`: semantic application version, current `1.3.0`.
+- `APP_VERSION`: semantic application version, current `1.4.0`.
+- `DEMO_MODE`: public demo marker, default `false`. The production Docker app still requires the backend for real translations.
 - `OPENAI_MODEL`: translation model.
 - `APP_PORT`: backend and public Docker Compose port, default `2288`.
 - `AUTH_ENABLED`: admin login is enabled by default; set to `false` only for trusted local-only use.
@@ -132,6 +133,33 @@ Restart the app after changing auth settings. When enabled, all UI and API route
 
 The app will show warnings while the default password or default session secret is still in use. Change `ADMIN_PASSWORD` and `SESSION_SECRET` before exposing the app beyond your own machine.
 
+## Static Demo
+
+This repository includes a safe static demo in `demo/` for Cloudflare Pages. It is intentionally separate from the Docker/FastAPI app:
+
+- no real uploads
+- no OpenAI API calls
+- no database
+- no secrets
+- simulated translation and mock scan data only
+
+Cloudflare Pages settings:
+
+```text
+Framework preset: None
+Build command: exit 0
+Build output directory: demo
+Environment variables: none required
+```
+
+You can also deploy the demo with Wrangler direct upload:
+
+```bash
+npx wrangler pages deploy demo --project-name universal-subtitle-translator-demo
+```
+
+Use the Docker deployment for the real authenticated app. Use the Cloudflare Pages demo only as a public preview.
+
 ## Batch Translation
 
 Open:
@@ -140,7 +168,7 @@ Open:
 http://localhost:2288/batches
 ```
 
-Enter a root folder path that the backend can access. The app scans subfolders recursively for common video files, prefers external `.srt` subtitles next to each video, falls back to extractable embedded subtitles through ffprobe/ffmpeg, previews files before starting, then translates with controlled file concurrency.
+Enter a mounted file or folder path that the backend can access, such as `/media/Movies` or `/media/Movies/Movie.mkv`. The app scans the path from inside the container without uploading or copying media files, prefers external `.srt` subtitles next to each video, falls back to extractable embedded subtitles through ffprobe/ffmpeg, previews files before starting, then translates with controlled file concurrency.
 
 Output naming uses the video base name plus the target language code:
 
@@ -151,7 +179,7 @@ Movie.en.srt -> Movie.fa.srt
 
 Existing target-language subtitles are skipped unless overwrite is enabled.
 
-When running in Docker, mount the media folder into the backend container before scanning it. For example, add a volume such as `/srv/media:/media:ro` to the backend service, set `MEDIA_ROOT=/media`, then scan `/media/Show`.
+When running in Docker or Portainer, mount the media folder into the backend container before scanning it. Keep the media mount read-only when possible. For example, add a volume such as `/srv/media:/media:ro` to the backend service, set `MEDIA_ROOT=/media`, then scan `/media/Shows`.
 
 Example compose volume for media folders:
 
@@ -183,7 +211,23 @@ Then open Batch mode and enter a container path such as:
 /media/Shows
 ```
 
-Docker browser uploads default to `10G` through Nginx (`NGINX_CLIENT_MAX_BODY_SIZE=10G`) and `10240` MB in the backend (`MAX_UPLOAD_MB=10240`), but mounted folders are still recommended for large videos because they avoid copying media into the app data volume.
+If the source folder is writable, translated `.srt` files are saved next to the video or source subtitle. If the media mount is read-only, translated outputs are saved under `OUTPUT_DIR` instead, while extracted embedded subtitles use the app temp folder.
+
+Docker browser uploads default to `10G` through Nginx (`NGINX_CLIENT_MAX_BODY_SIZE=10G`) and `10240` MB in the backend (`MAX_UPLOAD_MB=10240`), but browser upload is meant for small SRT/video files. Mounted server paths are recommended for large videos because they avoid re-uploading media through the browser and avoid filling the app data volume with copied media.
+
+Portainer stack example:
+
+```yaml
+services:
+  backend:
+    image: YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:1.4.0
+    environment:
+      MEDIA_ROOT: /media
+      OUTPUT_DIR: /app/data/outputs
+    volumes:
+      - /opt/subtitle-translator/data:/app/data
+      - /srv/media:/media:ro
+```
 
 ## Docker Hub
 
@@ -191,7 +235,7 @@ Build and publish the two runtime images with your Docker Hub namespace:
 
 ```bash
 docker login
-APP_VERSION=1.3.0
+APP_VERSION=1.4.0
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:latest ./backend
 docker build -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:${APP_VERSION} -t YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:latest ./frontend
 docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-backend:${APP_VERSION}
@@ -203,7 +247,7 @@ docker push YOUR_DOCKERHUB_USERNAME/universal-subtitle-translator-frontend:lates
 On a server that should pull images instead of building them locally, use:
 
 ```bash
-DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.3.0 docker compose -f docker-compose.hub.yml up -d
+DOCKERHUB_NAMESPACE=YOUR_DOCKERHUB_USERNAME IMAGE_TAG=1.4.0 docker compose -f docker-compose.hub.yml up -d
 ```
 
 ## Releases
@@ -217,7 +261,7 @@ This project uses semantic versioning: `MAJOR.MINOR.PATCH`.
 For a release, update `VERSION`, `APP_VERSION` in `.env.example`, and any README version examples to the same value. Commit the change, then create a matching Git tag:
 
 ```bash
-APP_VERSION=1.3.0
+APP_VERSION=1.4.0
 git add VERSION .env.example README.md docker-compose.yml docker-compose.hub.yml backend/app/config.py
 git commit -m "Release v${APP_VERSION}"
 git tag -a "v${APP_VERSION}" -m "Release v${APP_VERSION}"

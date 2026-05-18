@@ -27,9 +27,9 @@
             <div>
                 <div class="eyebrow">Subtitle Translation</div>
                 <h1>Translate subtitles without the clutter.</h1>
-                <p class="lead">Drop in an SRT or video, pick a language, and get a readable subtitle file.</p>
+                <p class="lead">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
             </div>
-            <a class="button secondary batch-link" href="/batches">Translate a Folder</a>
+            <a class="button secondary batch-link" href="/batches">Translate Mounted Media</a>
         </section>
 
         {% include "_warnings.html" %}
@@ -38,7 +38,7 @@
             <div class="panel-heading">
                 <div>
                     <h2>New Translation</h2>
-                    <p class="hint">Browser uploads are best for subtitles and smaller videos. For large media libraries, mount a folder and use Batch mode.</p>
+                    <p class="hint">Browser upload is for small SRT/video files only. For large videos, mount your media folder and use Batch mode with a path like /media/Movies.</p>
                 </div>
                 <span class="pill">Upload limit: {{ max_upload_mb }} MB</span>
             </div>
@@ -185,7 +185,7 @@
 
                     if (response.status === 413) {
                         throw new Error(
-                            "File too large for browser upload. For large videos, mount your media folder in Docker and use Batch mode with a path such as /media/Shows."
+                            "File too large for browser upload. For large videos, mount your media folder in Docker and use Batch mode with a path such as /media/Movies."
                         );
                     }
 

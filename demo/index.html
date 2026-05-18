@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="demo-mode" content="true">
+    <title>Universal Subtitle Translator Demo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <div class="brand">Universal Subtitle Translator</div>
+                <div class="subtle">Static Cloudflare Pages demo</div>
+            </div>
+            <span class="demo-pill">DEMO_MODE</span>
+        </header>
+
+        <section class="banner">
+            <strong>Demo mode is active.</strong>
+            <span>This page uses mock data and simulated translation only. It does not upload files, call OpenAI, store secrets, or contact the production API.</span>
+        </section>
+
+        <section class="hero">
+            <div>
+                <p class="eyebrow">No Backend Required</p>
+                <h1>Preview the subtitle workflow safely.</h1>
+                <p class="lead">Try the interface with sample subtitles and a mock media-library scan. The real Docker app keeps using OpenAI and local files normally.</p>
+            </div>
+            <div class="status-card">
+                <span class="status-dot"></span>
+                <div>
+                    <strong>Static demo ready</strong>
+                    <p>No uploads. No API calls. No database.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <form class="panel" id="translation-form">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Mock Translation</h2>
+                        <p>Paste or use sample SRT text. Translation is simulated in your browser.</p>
+                    </div>
+                    <button type="button" class="secondary" id="sample-button">Use Sample</button>
+                </div>
+
+                <label for="source-text">Subtitle text</label>
+                <textarea id="source-text" rows="12" spellcheck="false"></textarea>
+
+                <div class="controls">
+                    <label>
+                        Target language
+                        <select id="target-language">
+                            <option>Persian</option>
+                            <option>Spanish</option>
+                            <option>French</option>
+                            <option>Arabic</option>
+                        </select>
+                    </label>
+                    <button class="primary" id="translate-button" type="submit">Simulate Translation</button>
+                </div>
+
+                <div class="progress" aria-hidden="true">
+                    <span id="progress-bar"></span>
+                </div>
+            </form>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Mock Result</h2>
+                        <p>Output appears here after the simulated run.</p>
+                    </div>
+                    <span class="small-pill" id="result-state">Idle</span>
+                </div>
+                <pre id="result-output">No demo translation yet.</pre>
+            </section>
+        </section>
+
+        <section class="panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Mounted Media Preview</h2>
+                    <p>Demo of server-side path mode for Docker/Portainer deployments.</p>
+                </div>
+                <button class="secondary" id="scan-button" type="button">Simulate Scan</button>
+            </div>
+
+            <label for="media-path">Mounted path</label>
+            <input id="media-path" value="/media/Movies" autocomplete="off">
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Video</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Output</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scan-table">
+                        <tr>
+                            <td colspan="4" class="empty">Run a simulated scan.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="demo.js"></script>
+</body>
+</html>

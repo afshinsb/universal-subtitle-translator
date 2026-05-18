@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -11,6 +12,7 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm"}
 
 DEFAULT_SOURCE_PREFERENCE = "en,fr,es,de,it,pt,tr,ar,ru,ja,ko,zh,*"
 TARGET_SUBTITLE_EXISTS_REASON = "Already has selected target subtitle"
+OUTPUT_FALLBACK_REASON = "Source folder is not writable; output will be saved in the app output folder."
 
 def normalize_language_code(value: str | None) -> str:
     return known_language_code(value) or "unknown"
@@ -103,6 +105,61 @@ def translated_output_exists(folder: Path, base_stem: str, target_language: str)
     return None
 
 
+def is_inside_media_root(path: Path) -> bool:
+    if settings.media_root is None:
+        return True
+
+    media_root = settings.media_root.resolve()
+    resolved = path.resolve()
+    return resolved == media_root or media_root in resolved.parents
+
+
+def ensure_inside_media_root(path: Path) -> None:
+    if not is_inside_media_root(path):
+        raise RuntimeError(f"Path is outside MEDIA_ROOT: {settings.media_root}")
+
+
+def is_folder_writable(path: Path) -> bool:
+    return path.exists() and path.is_dir() and os.access(path, os.W_OK)
+
+
+def safe_output_subfolder(path: Path, root: Path) -> Path:
+    relative = safe_relative_path(path, root)
+
+    if relative in {"", "."}:
+        return Path()
+
+    parts = [
+        re.sub(r"[^A-Za-z0-9._ -]", "_", part)
+        for part in Path(relative).parts
+        if part not in {"", "."}
+    ]
+
+    return Path(*parts) if parts else Path()
+
+
+def translated_output_path(video_path: Path, root: Path, target_language: str) -> tuple[Path, str]:
+    output_name = translated_output_name(video_path.stem, target_language)
+    source_output = video_path.parent / output_name
+
+    if is_folder_writable(video_path.parent):
+        return source_output, "source"
+
+    output_subfolder = safe_output_subfolder(video_path.parent, root)
+    return settings.output_dir / output_subfolder / output_name, "output_dir"
+
+
+def extracted_subtitle_path(video_path: Path, root: Path, source_language: str) -> tuple[Path, str]:
+    output_name = extracted_source_name(video_path.stem, source_language)
+    source_output = video_path.parent / output_name
+
+    if is_folder_writable(video_path.parent):
+        return source_output, "source"
+
+    output_subfolder = safe_output_subfolder(video_path.parent, root)
+    return settings.temp_dir / "extracted" / output_subfolder / output_name, "temp_dir"
+
+
 def matching_external_subtitles(video_path: Path, target_language: str) -> list[dict]:
     folder = video_path.parent
     target_code = language_code(target_language)
@@ -185,6 +242,7 @@ def inspect_media_file(
         raise RuntimeError("File is not a supported video file.")
 
     root = root.resolve() if root else video_path.parent
+    ensure_inside_media_root(video_path)
     preferences = parse_source_preference(source_preference)
     relative_video = safe_relative_path(video_path, root)
     subfolder = safe_relative_path(video_path.parent, root)
@@ -193,8 +251,11 @@ def inspect_media_file(
     if subfolder == ".":
         subfolder = ""
 
-    output_path = video_path.parent / translated_output_name(video_path.stem, target_language)
+    output_path, output_location = translated_output_path(video_path, root, target_language)
     existing_output = translated_output_exists(video_path.parent, video_path.stem, target_language)
+
+    if output_location == "output_dir" and output_path.exists():
+        existing_output = output_path
 
     def skipped_result(reason: str, skipped_output_path: Path | None = output_path) -> dict:
         return {
@@ -246,6 +307,8 @@ def inspect_media_file(
                 "source_subtitle_name": selected_external["path"].name,
                 "output_path": str(output_path),
                 "output_name": output_path.name,
+                "output_location": output_location,
+                "output_note": OUTPUT_FALLBACK_REASON if output_location == "output_dir" else "",
                 "total_subtitles": selected_external["total_subtitles"],
             },
             "skipped": None,
@@ -259,7 +322,7 @@ def inspect_media_file(
     if not embedded:
         return skipped_result("No external or extractable embedded subtitle found.")
 
-    extracted_path = video_path.parent / extracted_source_name(video_path.stem, embedded["language"])
+    extracted_path, extracted_location = extracted_subtitle_path(video_path, root, embedded["language"])
 
     return {
         "item": {
@@ -274,32 +337,69 @@ def inspect_media_file(
             "source_stream_codec": embedded["codec_name"],
             "source_subtitle_path": str(extracted_path),
             "source_subtitle_name": extracted_path.name,
+            "source_subtitle_location": extracted_location,
             "output_path": str(output_path),
             "output_name": output_path.name,
+            "output_location": output_location,
+            "output_note": OUTPUT_FALLBACK_REASON if output_location == "output_dir" else "",
             "total_subtitles": 0,
         },
         "skipped": None,
     }
 
 
-def scan_media_folder(
-    folder_path: str,
+def scan_media_path(
+    media_path: str,
     target_language: str,
     source_preference: str | None = None,
     overwrite: bool = False,
     progress_callback: Callable[[dict], None] | None = None,
     cancel_check: Callable[[], bool] | None = None,
 ) -> dict:
-    root = Path(folder_path).resolve()
+    root = Path(media_path).resolve()
 
-    if not root.exists() or not root.is_dir():
-        raise RuntimeError("Folder does not exist or is not a directory.")
+    if not root.exists():
+        raise RuntimeError("Path does not exist.")
 
-    if settings.media_root is not None:
-        media_root = settings.media_root
+    ensure_inside_media_root(root)
 
-        if media_root not in root.parents and root != media_root:
-            raise RuntimeError(f"Folder is outside MEDIA_ROOT: {media_root}")
+    if root.is_file():
+        if root.suffix.lower() not in VIDEO_EXTENSIONS:
+            raise RuntimeError("File is not a supported video file.")
+
+        scan_result = inspect_media_file(
+            video_path=root,
+            target_language=target_language,
+            source_preference=source_preference,
+            overwrite=overwrite,
+            root=root.parent,
+            cancel_check=cancel_check,
+        )
+        items = [scan_result["item"]] if scan_result["item"] else []
+        skipped = [scan_result["skipped"]] if scan_result["skipped"] else []
+
+        if progress_callback:
+            progress_callback(
+                {
+                    "folders_scanned": 0,
+                    "files_checked": 1,
+                    "candidate_files_found": 1,
+                    "current_path": root.name,
+                    "items_found": len(items),
+                    "skipped_found": len(skipped),
+                }
+            )
+
+        return {
+            "items": items,
+            "skipped": skipped,
+            "total_files": len(items),
+            "skipped_files": len(skipped),
+            "total_subtitles": sum(item["total_subtitles"] for item in items),
+        }
+
+    if not root.is_dir():
+        raise RuntimeError("Path is not a file or directory.")
 
     items = []
     skipped = []
@@ -375,3 +475,21 @@ def scan_media_folder(
         "skipped_files": len(skipped),
         "total_subtitles": sum(item["total_subtitles"] for item in items),
     }
+
+
+def scan_media_folder(
+    folder_path: str,
+    target_language: str,
+    source_preference: str | None = None,
+    overwrite: bool = False,
+    progress_callback: Callable[[dict], None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
+) -> dict:
+    return scan_media_path(
+        media_path=folder_path,
+        target_language=target_language,
+        source_preference=source_preference,
+        overwrite=overwrite,
+        progress_callback=progress_callback,
+        cancel_check=cancel_check,
+    )

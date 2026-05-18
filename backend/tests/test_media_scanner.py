@@ -114,3 +114,64 @@ def test_media_root_rejects_scan_outside_mounted_root(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="outside MEDIA_ROOT"):
         media_scanner.scan_media_folder(str(outside_folder), "Persian")
+
+
+def test_scan_media_path_accepts_single_video_file(tmp_path, monkeypatch):
+    video = touch(tmp_path / "Movie.mkv")
+    subtitle = touch(tmp_path / "Movie.en.srt")
+
+    monkeypatch.setattr(media_scanner, "count_srt_subtitles", lambda path: 2)
+    monkeypatch.setattr(media_scanner, "embedded_subtitles", lambda *args, **kwargs: [])
+
+    result = media_scanner.scan_media_path(str(video), "Persian")
+
+    assert result["total_files"] == 1
+    assert result["items"][0]["source_subtitle_path"] == str(subtitle)
+    assert result["items"][0]["relative_path"] == "Movie.mkv"
+
+
+def test_read_only_media_outputs_fall_back_to_output_dir(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    media_root = tmp_path / "media"
+    show_folder = media_root / "Shows"
+    video = touch(show_folder / "Movie.mkv")
+    touch(show_folder / "Movie.en.srt")
+
+    monkeypatch.setattr(media_scanner.settings, "media_root", media_root.resolve())
+    monkeypatch.setattr(media_scanner.settings, "output_dir", data_dir / "outputs")
+    monkeypatch.setattr(media_scanner, "is_folder_writable", lambda path: False)
+    monkeypatch.setattr(media_scanner, "count_srt_subtitles", lambda path: 2)
+    monkeypatch.setattr(media_scanner, "embedded_subtitles", lambda *args, **kwargs: [])
+
+    result = media_scanner.scan_media_folder(str(media_root), "Persian")
+    item = result["items"][0]
+
+    assert item["video_path"] == str(video.resolve())
+    assert item["output_location"] == "output_dir"
+    assert item["output_path"] == str(data_dir / "outputs" / "Shows" / "Movie.fa.srt")
+    assert "not writable" in item["output_note"]
+
+
+def test_read_only_media_extracts_embedded_subtitles_to_temp_dir(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    media_root = tmp_path / "media"
+    show_folder = media_root / "Shows"
+    touch(show_folder / "Episode.mkv")
+
+    monkeypatch.setattr(media_scanner.settings, "media_root", media_root.resolve())
+    monkeypatch.setattr(media_scanner.settings, "output_dir", data_dir / "outputs")
+    monkeypatch.setattr(media_scanner.settings, "temp_dir", data_dir / "temp")
+    monkeypatch.setattr(media_scanner, "is_folder_writable", lambda path: False)
+    monkeypatch.setattr(media_scanner, "matching_external_subtitles", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        media_scanner,
+        "embedded_subtitles",
+        lambda *args, **kwargs: [{"index": 1, "language": "en", "codec_name": "subrip"}],
+    )
+
+    result = media_scanner.scan_media_folder(str(media_root), "Persian")
+    item = result["items"][0]
+
+    assert item["source_subtitle_location"] == "temp_dir"
+    assert item["source_subtitle_path"] == str(data_dir / "temp" / "extracted" / "Shows" / "Episode.en.srt")
+    assert item["output_path"] == str(data_dir / "outputs" / "Shows" / "Episode.fa.srt")

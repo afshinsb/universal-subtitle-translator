@@ -24,9 +24,9 @@
         </header>
 
         <section class="page-header">
-            <div class="eyebrow">Folder Translation</div>
-            <h1>Translate a media folder</h1>
-            <p class="lead">Scan a folder, preview subtitles, then translate everything in one run.</p>
+            <div class="eyebrow">Server Path Translation</div>
+            <h1>Translate mounted media</h1>
+            <p class="lead">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
         </section>
 
         {% include "_warnings.html" %}
@@ -35,7 +35,7 @@
             <form id="batch-form">
                 <div class="batch-translate-grid">
                     <div>
-                        <label for="folder_path">Root folder</label>
+                        <label for="folder_path">Mounted file or folder path</label>
                         <div class="folder-path-control">
                             <input id="folder_path" name="folder_path" type="text" placeholder="{{ folder_placeholder }}" required>
                             {% if folder_picker_enabled %}
@@ -43,9 +43,9 @@
                             {% endif %}
                         </div>
                         {% if media_root %}
-                            <p class="field-hint">Docker batch mode uses mounted paths. Enter a folder under <code>{{ media_root }}</code>, such as <code>{{ media_root }}/Shows</code>.</p>
+                            <p class="field-hint">Docker/server mode reads mounted paths directly. Enter a file or folder under <code>{{ media_root }}</code>, such as <code>{{ media_root }}/Shows</code>.</p>
                         {% else %}
-                            <p class="field-hint">In Docker or on a server, type the mounted container path manually, such as <code>/media/Shows</code>.</p>
+                            <p class="field-hint">In Docker or on a server, type the mounted container path manually, such as <code>/media/Shows</code> or <code>/media/Movie.mkv</code>.</p>
                         {% endif %}
                     </div>
 
@@ -98,7 +98,7 @@
                 <div class="actions">
                     <button type="button" class="primary scan-button" id="scan-button">
                         <span class="button-progress" id="scan-button-progress"></span>
-                        <span class="button-label" id="scan-button-label">Scan Folder</span>
+                        <span class="button-label" id="scan-button-label">Scan Path</span>
                     </button>
                     <button type="button" class="danger" id="cancel-scan-button" hidden>Cancel Scan</button>
                     <button type="submit" class="secondary" id="start-button" disabled>Start Batch Translation</button>
@@ -120,7 +120,7 @@
             <div class="empty-state" id="scan-empty" hidden>
                 <strong>No files are ready to translate.</strong>
                 <ul class="compact-list">
-                    <li>The folder may not contain supported video files.</li>
+                    <li>The path may not contain supported video files.</li>
                     <li>Selected target subtitles may already exist.</li>
                     <li>Videos may not have readable subtitle tracks.</li>
                 </ul>
@@ -160,7 +160,7 @@
         </section>
 
         <section class="panel">
-            <h2>Recent Batches</h2>
+            <h2>Recent Server Runs</h2>
             {% if batches %}
                 <div class="table-wrap">
                     <table>
@@ -226,7 +226,7 @@
         let currentScanId = null;
         const canTranslate = {{ "true" if can_translate else "false" }};
 
-        function setBusy(isBusy, label = "Scan Folder") {
+        function setBusy(isBusy, label = "Scan Path") {
             scanButton.disabled = isBusy;
             cancelScanButton.hidden = !isBusy;
             cancelScanButton.disabled = false;
@@ -301,6 +301,12 @@
                 stepCell.textContent = file.step;
                 countCell.textContent = file.total_subtitles;
                 outputCell.textContent = file.output_name;
+                if (file.output_note) {
+                    const outputNote = document.createElement("div");
+                    outputNote.className = "file-subtext";
+                    outputNote.textContent = file.output_note;
+                    outputCell.appendChild(outputNote);
+                }
 
                 row.appendChild(videoCell);
                 row.appendChild(folderCell);
