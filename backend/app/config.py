@@ -119,8 +119,8 @@ class Settings:
         else None
     )
 
-    default_source_language: str = env_value("DEFAULT_SOURCE_LANGUAGE", "Auto") or ""
-    default_target_language: str = env_value("DEFAULT_TARGET_LANGUAGE", "Persian") or ""
+    default_source_language: str = env_value("DEFAULT_SOURCE_LANGUAGE", "Auto") or "Auto"
+    default_target_language: str = env_value("DEFAULT_TARGET_LANGUAGE", "Persian") or "Persian"
     default_style: str = env_value("DEFAULT_STYLE", "natural_conversational") or "natural_conversational"
 
     srt_batch_size: int = parse_int_env("SRT_BATCH_SIZE", 40)
@@ -549,32 +549,29 @@ def config_status() -> dict:
         ]
     )
 
-    source_ok = raw_setting("DEFAULT_SOURCE_LANGUAGE") not in {None, ""}
     checks.append(
         {
             "id": "default_source_language",
             "label": "Default source language",
-            "ok": source_ok,
-            "severity": "ok" if source_ok else "warning",
+            "ok": True,
+            "severity": "ok",
             "blocking": False,
-            "message": "DEFAULT_SOURCE_LANGUAGE is configured." if source_ok else "DEFAULT_SOURCE_LANGUAGE is missing; source language will be detected automatically.",
-            "fix": "No action needed." if source_ok else "Optionally add DEFAULT_SOURCE_LANGUAGE=Auto to your .env file, then restart the app.",
-            "value": settings.default_source_language or "Auto",
+            "message": "Default source language is configured.",
+            "fix": "No action needed.",
+            "value": settings.default_source_language,
         }
     )
 
-    target_raw = raw_setting("DEFAULT_TARGET_LANGUAGE")
-    target_ok = target_raw not in {None, ""}
     checks.append(
         {
             "id": "default_target_language",
             "label": "Default target language",
-            "ok": target_ok,
-            "severity": "ok" if target_ok else "error",
-            "blocking": not target_ok,
-            "message": "DEFAULT_TARGET_LANGUAGE is configured." if target_ok else "DEFAULT_TARGET_LANGUAGE is missing.",
-            "fix": "No action needed." if target_ok else "Add DEFAULT_TARGET_LANGUAGE to your .env file, then restart the app.",
-            "value": settings.default_target_language if target_ok else "missing",
+            "ok": True,
+            "severity": "ok",
+            "blocking": False,
+            "message": "Default target language is configured.",
+            "fix": "No action needed.",
+            "value": settings.default_target_language,
         }
     )
 
