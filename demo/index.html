@@ -14,15 +14,32 @@
                 <div class="brand-title" id="page-title">Subtitle Translator</div>
                 <div class="brand-subtitle" id="page-subtitle">Clean subtitles for your library</div>
             </div>
+            <button type="button" class="menu-toggle" data-menu-toggle aria-expanded="false" aria-label="Open navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
             <nav class="nav" aria-label="Demo navigation">
                 <a class="active" href="#home" data-page-link="home">Home</a>
                 <a href="#batch" data-page-link="batch">Batch</a>
+                <a href="#outputs" data-page-link="outputs">Outputs</a>
                 <a href="#about" data-page-link="about">About</a>
                 <a href="#settings" data-page-link="settings">Settings</a>
                 <a href="#logs" data-page-link="logs">Logs</a>
-                <button type="button" class="theme-toggle" data-theme-toggle>Dark mode</button>
-                <span class="session-chip">Signed in as demo</span>
-                <button type="button" class="nav-logout-button" disabled>Logout</button>
+                <div class="account-menu">
+                    <button type="button" class="account-button" data-account-toggle aria-expanded="false" aria-label="Open account menu">Account</button>
+                    <div class="account-popover" data-account-popover hidden>
+                        <div class="account-summary">
+                            <span>Signed in</span>
+                            <strong>demo</strong>
+                        </div>
+                        <button type="button" class="secondary nav-logout-button" disabled>Logout</button>
+                    </div>
+                </div>
+                <span class="mode-controls" aria-label="Display controls">
+                    <button type="button" class="ui-mode-toggle" data-ui-mode-toggle aria-pressed="false">Minimal</button>
+                    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Light</button>
+                </span>
             </nav>
         </header>
 
@@ -38,18 +55,21 @@
                 <div>
                     <div class="eyebrow">Subtitle Translation</div>
                     <h1>Translate subtitles without the clutter.</h1>
-                    <p class="lead">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
+                    <p class="lead minimal-extra">Upload small subtitle files here, or use Batch mode for mounted media libraries.</p>
                 </div>
-                <a class="button secondary batch-link" href="#batch" data-page-link="batch">Translate Mounted Media</a>
+                <a class="button secondary batch-link minimal-extra" href="#batch" data-page-link="batch">Translate Mounted Media</a>
             </section>
 
             <section class="panel primary-panel">
-                <div class="panel-heading">
+                <div class="panel-heading minimal-extra">
                     <div>
                         <h2>New Translation</h2>
                         <p class="hint">Browser upload is for small SRT/video files only. This public demo uses a mock file and simulated translation.</p>
                     </div>
                     <span class="pill">Upload disabled in demo</span>
+                </div>
+                <div class="minimal-heading">
+                    <h1>Translate</h1>
                 </div>
 
                 <form id="single-file-form">
@@ -78,6 +98,12 @@
                                 <input name="overwrite_existing" type="checkbox" value="true">
                                 Overwrite existing subtitle
                             </label>
+                            <div class="source-language-field">
+                                <label>Source language</label>
+                                <select name="source_language" aria-label="Source language">
+                                    <option selected>Auto detect</option>
+                                </select>
+                            </div>
 
                             <div>
                                 <label>Translation style</label>
@@ -99,7 +125,7 @@
                 </form>
             </section>
 
-            <section class="recent-grid">
+            <section class="recent-grid minimal-hidden">
                 <div class="panel quiet-panel">
                     <div class="section-heading">
                         <h2>Recent Outputs</h2>
@@ -120,7 +146,7 @@
             <section class="page-header">
                 <div class="eyebrow">Server Path Translation</div>
                 <h1>Translate mounted media</h1>
-                <p class="lead">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
+                <p class="lead minimal-extra">Enter a file or folder path that the server can access, preview subtitles, then translate without browser uploads.</p>
             </section>
 
             <section class="panel">
@@ -132,7 +158,7 @@
                                 <input id="folder_path" name="folder_path" value="/media/Movies" required>
                                 <button type="button" class="secondary" id="pick-folder-button">Browse</button>
                             </div>
-                            <p class="field-hint">Demo mode simulates this path. The real Docker app scans mounted paths from inside the container.</p>
+                            <p class="field-hint minimal-extra">Demo mode simulates this path. The real Docker app scans mounted paths from inside the container.</p>
                         </div>
 
                         <div>
@@ -210,7 +236,7 @@
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel minimal-hidden">
                 <h2>Recent Server Runs</h2>
                 <div class="table-wrap">
                     <table>
@@ -223,6 +249,33 @@
                             </tr>
                         </thead>
                         <tbody id="recent-batches"></tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+
+        <section class="demo-page" data-page="outputs" hidden>
+            <section class="page-header minimal-extra">
+                <div class="eyebrow">Recent Results</div>
+                <h1>Translated outputs</h1>
+                <p class="lead">Finished demo translations appear here with simulated download actions.</p>
+            </section>
+
+            <section class="panel">
+                <div class="minimal-heading">
+                    <h1>Outputs</h1>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Output</th>
+                                <th>Source</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="outputs-table"></tbody>
                     </table>
                 </div>
             </section>
@@ -289,7 +342,7 @@
                     </div>
                     <div>
                         <span>Version</span>
-                        <strong>1.4.0 demo</strong>
+                        <strong>1.5.1 demo</strong>
                     </div>
                 </div>
             </section>
@@ -387,7 +440,7 @@
 
         <footer class="site-footer">
             <div class="footer-copy">
-                <strong>Universal Subtitle Translator</strong> v1.4.0 demo by Afshin Saberi is free and open source, licensed under MIT.
+                <strong>Universal Subtitle Translator</strong> v1.5.1 demo by Afshin Saberi is free and open source, licensed under MIT.
             </div>
             <div class="footer-links">
                 <a href="#about" data-page-link="about">About</a>

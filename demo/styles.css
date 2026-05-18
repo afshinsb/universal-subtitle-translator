@@ -88,10 +88,92 @@ a {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+}
+
+.menu-toggle {
+    display: none;
+    width: 42px;
+    min-height: 38px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-direction: column;
+    padding: 0;
+}
+
+.menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+}
+
+.topbar.nav-collapsed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.topbar.nav-collapsed .menu-toggle {
+    display: inline-flex;
+}
+
+.topbar.nav-collapsed .nav {
+    display: none;
+    grid-column: 1 / -1;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.topbar.nav-collapsed.nav-open .nav {
+    display: flex;
+}
+
+.topbar.nav-collapsed .nav a,
+.topbar.nav-collapsed .nav button,
+.topbar.nav-collapsed .nav .account-menu,
+.topbar.nav-collapsed .nav .mode-controls {
+    width: 100%;
+}
+
+.topbar.nav-collapsed .nav a,
+.topbar.nav-collapsed .nav button {
+    justify-content: center;
+    text-align: center;
+}
+
+.topbar.nav-collapsed .mode-controls {
+    margin-left: 0;
+}
+
+.topbar.nav-collapsed .mode-controls .theme-toggle,
+.topbar.nav-collapsed .mode-controls .ui-mode-toggle {
+    flex: 1 1 0;
+    justify-content: center;
+}
+
+.topbar.nav-collapsed .account-menu {
+    display: block;
+}
+
+.topbar.nav-collapsed .account-popover {
+    position: static;
+    width: 100%;
+    margin-top: 8px;
+    box-shadow: none;
 }
 
 .nav a,
+.ui-mode-toggle,
 .theme-toggle,
 .button,
 button {
@@ -119,25 +201,109 @@ button:hover {
     background: color-mix(in srgb, var(--accent) 18%, var(--surface-2));
 }
 
-.theme-toggle {
+.theme-toggle,
+.ui-mode-toggle {
     white-space: nowrap;
 }
 
-.session-chip {
+.mode-controls {
     display: inline-flex;
     align-items: center;
-    min-height: 38px;
+    margin-left: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface-2);
+}
+
+.mode-controls .theme-toggle,
+.mode-controls .ui-mode-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.mode-controls .theme-toggle {
+    border-left: 1px solid var(--line);
+}
+
+.mode-controls .theme-toggle::before,
+.mode-controls .ui-mode-toggle::before {
+    content: "";
+    width: 26px;
+    height: 15px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+    background: var(--surface-3);
+    box-shadow: inset 10px 0 0 var(--muted);
+}
+
+.mode-controls .theme-toggle[aria-pressed="true"]::before,
+.mode-controls .ui-mode-toggle[aria-pressed="true"]::before {
+    border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface-3));
+    box-shadow: inset -10px 0 0 var(--accent);
+}
+
+.account-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.account-button {
+    min-height: 38px;
+    white-space: nowrap;
+}
+
+.account-button::after {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 7px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    vertical-align: middle;
+}
+
+.account-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    width: 220px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 10px;
+}
+
+.account-summary {
+    display: grid;
+    gap: 2px;
+    padding: 4px 4px 10px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 10px;
+}
+
+.account-summary span {
     color: var(--muted);
-    padding: 7px 11px;
     font-size: 12px;
     font-weight: 800;
-    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+.account-summary strong {
+    overflow-wrap: anywhere;
 }
 
 .nav-logout-button {
+    width: 100%;
     min-height: 38px;
 }
 
@@ -203,6 +369,11 @@ h2 {
 
 .primary-panel {
     padding: 28px;
+}
+
+.minimal-heading,
+.source-language-field {
+    display: none;
 }
 
 .quiet-panel {
@@ -333,6 +504,19 @@ h2 {
 
 .actions > * {
     flex: 1 1 190px;
+}
+
+.toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.toolbar > * {
+    flex: 0 0 auto;
 }
 
 label {
@@ -968,6 +1152,190 @@ code {
 
 .demo-banner {
     box-shadow: none;
+}
+
+:root[data-ui-mode="minimal"] .app-shell {
+    width: min(980px, calc(100% - 32px));
+    padding: 16px 0 28px;
+}
+
+:root[data-ui-mode="minimal"] .topbar {
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
+}
+
+:root[data-ui-mode="minimal"] .brand-subtitle,
+:root[data-ui-mode="minimal"] .minimal-extra,
+:root[data-ui-mode="minimal"] .minimal-hidden,
+:root[data-ui-mode="minimal"] .eyebrow,
+:root[data-ui-mode="minimal"] .home-hero,
+:root[data-ui-mode="minimal"] .footer-copy {
+    display: none;
+}
+
+:root[data-ui-mode="minimal"] .minimal-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+:root[data-ui-mode="minimal"] .minimal-heading h1 {
+    margin: 0;
+}
+
+:root[data-ui-mode="minimal"] .nav {
+    gap: 6px;
+    margin-left: auto;
+}
+
+:root[data-ui-mode="minimal"] .nav a {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+}
+
+:root[data-ui-mode="minimal"] .nav a:hover,
+:root[data-ui-mode="minimal"] .nav a.active {
+    color: var(--text);
+    border-color: var(--line);
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="#about"],
+:root[data-ui-mode="minimal"] .nav a[href="#settings"],
+:root[data-ui-mode="minimal"] .nav a[href="#logs"],
+:root[data-ui-mode="minimal"] .account-button {
+    width: 34px;
+    overflow: hidden;
+    color: transparent;
+    position: relative;
+    opacity: 0.68;
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="#about"]::after,
+:root[data-ui-mode="minimal"] .nav a[href="#settings"]::after,
+:root[data-ui-mode="minimal"] .nav a[href="#logs"]::after,
+:root[data-ui-mode="minimal"] .account-button::before {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="#about"]::after {
+    content: "?";
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="#settings"]::after {
+    content: "S";
+}
+
+:root[data-ui-mode="minimal"] .nav a[href="#logs"]::after {
+    content: "L";
+}
+
+:root[data-ui-mode="minimal"] .account-button::before {
+    content: "A";
+}
+
+:root[data-ui-mode="minimal"] .account-button::after {
+    content: none;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#about"],
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#settings"],
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#logs"],
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button {
+    width: 100%;
+    color: var(--text);
+    opacity: 1;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#about"]::after,
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#settings"]::after,
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#logs"]::after,
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button::before {
+    content: none;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button::after {
+    content: "";
+}
+
+:root[data-ui-mode="minimal"] .nav a,
+:root[data-ui-mode="minimal"] .theme-toggle,
+:root[data-ui-mode="minimal"] .ui-mode-toggle,
+:root[data-ui-mode="minimal"] .button,
+:root[data-ui-mode="minimal"] button {
+    min-height: 34px;
+    padding: 6px 10px;
+    border-radius: 7px;
+}
+
+:root[data-ui-mode="minimal"] .panel,
+:root[data-ui-mode="minimal"] .card,
+:root[data-ui-mode="minimal"] .log-metric {
+    box-shadow: none;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-color: color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+:root[data-ui-mode="minimal"] .primary-panel {
+    width: min(760px, 100%);
+    margin-inline: auto;
+    padding: 18px;
+}
+
+:root[data-ui-mode="minimal"] input,
+:root[data-ui-mode="minimal"] select,
+:root[data-ui-mode="minimal"] .toggle {
+    min-height: 40px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+}
+
+:root[data-ui-mode="minimal"] .home-translate-grid {
+    grid-template-columns: minmax(260px, 1fr) minmax(190px, 240px);
+}
+
+:root[data-ui-mode="minimal"] .batch-translate-grid {
+    grid-template-columns: minmax(320px, 1fr) minmax(170px, 220px);
+}
+
+:root[data-ui-mode="minimal"] .source-language-field {
+    display: block;
+}
+
+:root[data-ui-mode="minimal"] .actions {
+    gap: 8px;
+    margin-top: 10px;
+}
+
+:root[data-ui-mode="minimal"] .actions > * {
+    flex: 0 0 auto;
+}
+
+:root[data-ui-mode="minimal"] #single-submit {
+    width: auto;
+    min-width: 136px;
+    min-height: 40px;
+    padding-inline: 20px;
+}
+
+:root[data-ui-mode="minimal"] .recent-grid {
+    display: none;
+}
+
+:root[data-ui-mode="minimal"] .site-footer {
+    padding-top: 10px;
+    font-size: 12px;
 }
 
 @media (max-width: 900px) {

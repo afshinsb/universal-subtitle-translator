@@ -1,9 +1,25 @@
 {% if auth_enabled %}
     {% set signed_in_user = current_username(request) %}
     {% if signed_in_user %}
-        <span class="session-chip" title="Signed in">Signed in as {{ signed_in_user }}</span>
-        <form method="post" action="/logout" class="nav-logout-form">
-            <button type="submit" class="secondary nav-logout-button">Logout</button>
-        </form>
+        <div class="account-menu">
+            <button
+                type="button"
+                class="account-button"
+                data-account-toggle
+                aria-expanded="false"
+                aria-label="Open account menu"
+            >
+                Account
+            </button>
+            <div class="account-popover" data-account-popover hidden>
+                <div class="account-summary">
+                    <span>Signed in</span>
+                    <strong>{{ signed_in_user }}</strong>
+                </div>
+                <form method="post" action="/logout" class="nav-logout-form">
+                    <button type="submit" class="secondary nav-logout-button">Logout</button>
+                </form>
+            </div>
+        </div>
     {% endif %}
 {% endif %}

@@ -88,7 +88,7 @@ a {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
 }
 
 .menu-toggle {
@@ -108,6 +108,82 @@ a {
     height: 2px;
     border-radius: 999px;
     background: currentColor;
+}
+
+.topbar.nav-collapsed {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+}
+
+.topbar.nav-collapsed .menu-toggle {
+    display: inline-flex;
+}
+
+.topbar.nav-collapsed .nav {
+    display: none;
+    grid-column: 1 / -1;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.topbar.nav-collapsed.nav-open .nav {
+    display: flex;
+}
+
+.topbar.nav-collapsed .nav a,
+.topbar.nav-collapsed .nav button,
+.topbar.nav-collapsed .nav .account-menu,
+.topbar.nav-collapsed .nav .nav-logout-form,
+.topbar.nav-collapsed .nav .mode-controls {
+    width: 100%;
+}
+
+.topbar.nav-collapsed .nav a,
+.topbar.nav-collapsed .nav button {
+    justify-content: center;
+    text-align: center;
+}
+
+.topbar.nav-collapsed .mode-controls {
+    margin-left: 0;
+}
+
+.topbar.nav-collapsed .mode-controls .theme-toggle,
+.topbar.nav-collapsed .mode-controls .ui-mode-toggle {
+    flex: 1 1 0;
+    justify-content: center;
+}
+
+.topbar.nav-collapsed .account-menu {
+    display: block;
+}
+
+.topbar.nav-collapsed .account-popover {
+    position: static;
+    width: 100%;
+    margin-top: 8px;
+    box-shadow: none;
+}
+
+.topbar.nav-collapsed .nav a[href="/about"],
+.topbar.nav-collapsed .nav a[href="/settings"],
+.topbar.nav-collapsed .nav a[href="/logs"] {
+    width: 100%;
+    color: var(--text);
+}
+
+.topbar.nav-collapsed .nav a[href="/about"]::after,
+.topbar.nav-collapsed .nav a[href="/settings"]::after,
+.topbar.nav-collapsed .nav a[href="/logs"]::after {
+    content: none;
 }
 
 .nav a,
@@ -187,18 +263,58 @@ button:hover {
     border-left: 1px solid var(--line);
 }
 
-.session-chip {
+.account-menu {
+    position: relative;
     display: inline-flex;
-    align-items: center;
+}
+
+.account-button {
     min-height: 38px;
+    white-space: nowrap;
+}
+
+.account-button::after {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 7px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    vertical-align: middle;
+}
+
+.account-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    z-index: 20;
+    width: 220px;
     border: 1px solid var(--line);
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    padding: 10px;
+}
+
+.account-summary {
+    display: grid;
+    gap: 2px;
+    padding: 4px 4px 10px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 10px;
+}
+
+.account-summary span {
     color: var(--muted);
-    padding: 7px 11px;
     font-size: 12px;
     font-weight: 800;
-    white-space: nowrap;
+    text-transform: uppercase;
+}
+
+.account-summary strong {
+    overflow-wrap: anywhere;
 }
 
 .nav-logout-form {
@@ -206,7 +322,8 @@ button:hover {
 }
 
 .nav-logout-button {
-    min-height: 38px;
+    width: 100%;
+    min-height: 36px;
 }
 
 .page-header {
@@ -924,8 +1041,15 @@ code {
 
 .toolbar {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-top: 14px;
+}
+
+.toolbar > * {
+    flex: 0 0 auto;
 }
 
 .readiness-grid {
@@ -1254,13 +1378,15 @@ code {
 }
 
 :root[data-ui-mode="minimal"] .app-shell {
-    width: min(920px, calc(100% - 28px));
-    padding: 14px 0 24px;
+    width: min(980px, calc(100% - 32px));
+    padding: 16px 0 28px;
 }
 
 :root[data-ui-mode="minimal"] .topbar {
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 62%, transparent);
 }
 
 :root[data-ui-mode="minimal"] .brand-subtitle,
@@ -1269,8 +1395,7 @@ code {
 :root[data-ui-mode="minimal"] .eyebrow,
 :root[data-ui-mode="minimal"] .home-hero,
 :root[data-ui-mode="minimal"] .footer-copy,
-:root[data-ui-mode="minimal"] .job-model,
-:root[data-ui-mode="minimal"] .session-chip {
+:root[data-ui-mode="minimal"] .job-model {
     display: none;
 }
 
@@ -1292,6 +1417,7 @@ code {
 
 :root[data-ui-mode="minimal"] .nav {
     gap: 6px;
+    margin-left: auto;
 }
 
 :root[data-ui-mode="minimal"] .nav a[href="/about"],
@@ -1325,13 +1451,75 @@ code {
     content: "L";
 }
 
+:root[data-ui-mode="minimal"] .account-button {
+    width: 34px;
+    overflow: hidden;
+    color: transparent;
+    position: relative;
+    opacity: 0.68;
+}
+
+:root[data-ui-mode="minimal"] .account-button::before {
+    content: "A";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+}
+
+:root[data-ui-mode="minimal"] .account-button::after {
+    content: none;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/about"],
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/settings"],
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/logs"] {
+    width: 100%;
+    color: var(--text);
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/about"]::after,
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/settings"]::after,
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="/logs"]::after {
+    content: none;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button {
+    width: 100%;
+    color: var(--text);
+    opacity: 1;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button::before {
+    content: none;
+}
+
+:root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button::after {
+    content: "";
+}
+
 :root[data-ui-mode="minimal"] .nav a,
 :root[data-ui-mode="minimal"] .theme-toggle,
 :root[data-ui-mode="minimal"] .ui-mode-toggle,
 :root[data-ui-mode="minimal"] .button,
 :root[data-ui-mode="minimal"] button {
-    min-height: 36px;
-    padding: 7px 11px;
+    min-height: 34px;
+    padding: 6px 10px;
+    border-radius: 7px;
+}
+
+:root[data-ui-mode="minimal"] .nav a {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+}
+
+:root[data-ui-mode="minimal"] .nav a:hover,
+:root[data-ui-mode="minimal"] .nav a.active {
+    color: var(--text);
+    border-color: var(--line);
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
 }
 
 :root[data-ui-mode="minimal"] .nav a[href="/about"],
@@ -1345,12 +1533,16 @@ code {
 :root[data-ui-mode="minimal"] .card,
 :root[data-ui-mode="minimal"] .log-metric {
     box-shadow: none;
-    padding: 14px;
-    margin-bottom: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border-color: color-mix(in srgb, var(--line) 72%, transparent);
+    background: color-mix(in srgb, var(--surface) 76%, transparent);
 }
 
 :root[data-ui-mode="minimal"] .primary-panel {
-    padding: 16px;
+    width: min(760px, 100%);
+    margin-inline: auto;
+    padding: 18px;
 }
 
 :root[data-ui-mode="minimal"] .panel-heading,
@@ -1374,6 +1566,7 @@ code {
 :root[data-ui-mode="minimal"] .toggle {
     min-height: 40px;
     padding: 8px 10px;
+    background: color-mix(in srgb, var(--surface-2) 82%, transparent);
 }
 
 :root[data-ui-mode="minimal"] .file-picker input[type="file"] {
@@ -1382,7 +1575,7 @@ code {
 }
 
 :root[data-ui-mode="minimal"] .hero-action {
-    min-height: 44px;
+    min-height: 40px;
 }
 
 :root[data-ui-mode="minimal"] .home-translate-grid,
@@ -1402,12 +1595,12 @@ code {
     grid-template-columns: minmax(260px, 1fr) minmax(190px, 240px);
 }
 
-:root[data-ui-mode="minimal"] .source-language-field {
-    display: block;
+:root[data-ui-mode="minimal"] .batch-translate-grid {
+    grid-template-columns: minmax(320px, 1fr) minmax(170px, 220px);
 }
 
-:root[data-ui-mode="minimal"] #single-submit {
-    width: 100%;
+:root[data-ui-mode="minimal"] .source-language-field {
+    display: block;
 }
 
 :root[data-ui-mode="minimal"] .actions {
@@ -1415,7 +1608,27 @@ code {
 }
 
 :root[data-ui-mode="minimal"] .actions > * {
-    flex-basis: 150px;
+    flex: 0 0 auto;
+}
+
+:root[data-ui-mode="minimal"] #single-file-form .actions {
+    justify-content: flex-start;
+}
+
+:root[data-ui-mode="minimal"] #single-submit {
+    width: auto;
+    min-width: 136px;
+    padding-inline: 20px;
+}
+
+:root[data-ui-mode="minimal"] button.primary,
+:root[data-ui-mode="minimal"] .button.primary {
+    box-shadow: none;
+}
+
+:root[data-ui-mode="minimal"] button.secondary,
+:root[data-ui-mode="minimal"] .button.secondary {
+    background: color-mix(in srgb, var(--surface-3) 74%, transparent);
 }
 
 :root[data-ui-mode="minimal"] .advanced-options {
@@ -1506,6 +1719,14 @@ code {
     :root[data-ui-mode="minimal"] .home-translate-grid {
         grid-template-columns: 1fr;
     }
+
+    :root[data-ui-mode="minimal"] #single-file-form .actions {
+        justify-content: stretch;
+    }
+
+    :root[data-ui-mode="minimal"] #single-submit {
+        width: 100%;
+    }
 }
 
 @media (max-width: 900px) {
@@ -1514,53 +1735,12 @@ code {
         padding-top: 18px;
     }
 
-    .topbar {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
+    .toolbar {
+        justify-content: stretch;
     }
 
-    .menu-toggle {
-        display: inline-flex;
-    }
-
-    .nav {
-        display: none;
-        grid-column: 1 / -1;
-        width: 100%;
-        align-items: stretch;
-        padding: 12px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
-    }
-
-    .topbar.nav-open .nav {
-        display: flex;
-    }
-
-    .nav a,
-    .nav button,
-    .nav .nav-logout-form,
-    .nav .mode-controls {
-        width: 100%;
-    }
-
-    .nav a,
-    .nav button {
-        justify-content: center;
-        text-align: center;
-    }
-
-    .mode-controls {
-        margin-left: 0;
-    }
-
-    .mode-controls .theme-toggle,
-    .mode-controls .ui-mode-toggle {
-        flex: 1 1 0;
-        justify-content: center;
+    .toolbar > * {
+        flex: 1 1 170px;
     }
 
     :root[data-ui-mode="minimal"] .nav a[href="/about"],

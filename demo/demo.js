@@ -1,6 +1,7 @@
 const pageMeta = {
     home: ["Subtitle Translator", "Clean subtitles for your library"],
     batch: ["Batch Translation", "Translate a folder of movies or shows"],
+    outputs: ["Outputs", "Finished subtitle translations"],
     about: ["About", "Universal Subtitle Translator"],
     settings: ["Settings", "Loaded from your environment"],
     logs: ["Logs", "Activity, warnings, errors, provider usage, and cleanup events"],
@@ -143,6 +144,92 @@ const pageSubtitle = document.getElementById("page-subtitle");
 const pages = Array.from(document.querySelectorAll("[data-page]"));
 const pageLinks = Array.from(document.querySelectorAll("[data-page-link]"));
 const themeToggle = document.querySelector("[data-theme-toggle]");
+const uiModeToggle = document.querySelector("[data-ui-mode-toggle]");
+
+function setMenuState(button, isOpen) {
+    button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    button.setAttribute("aria-label", isOpen ? "Close navigation" : "Open navigation");
+}
+
+function closeHeaderNav(header) {
+    const button = header.querySelector("[data-menu-toggle]");
+    header.classList.remove("nav-open");
+    if (button) {
+        setMenuState(button, false);
+    }
+}
+
+function updateHeaderNav(header) {
+    const brand = header.querySelector(".brand");
+    const nav = header.querySelector(".nav");
+    const button = header.querySelector("[data-menu-toggle]");
+
+    if (!brand || !nav || !button) {
+        return;
+    }
+
+    const wasOpen = header.classList.contains("nav-open");
+    header.classList.remove("nav-collapsed", "nav-open");
+    setMenuState(button, false);
+
+    const previousWrap = nav.style.flexWrap;
+    nav.style.flexWrap = "nowrap";
+    const shouldCollapse = brand.offsetWidth + nav.scrollWidth + 18 > header.clientWidth;
+    nav.style.flexWrap = previousWrap;
+
+    if (shouldCollapse) {
+        header.classList.add("nav-collapsed");
+        if (wasOpen) {
+            header.classList.add("nav-open");
+            setMenuState(button, true);
+        }
+    }
+}
+
+function updateAllHeaderNavs() {
+    for (const header of document.querySelectorAll(".topbar")) {
+        updateHeaderNav(header);
+    }
+}
+
+function applyTheme(theme) {
+    const nextTheme = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem("demoTheme", nextTheme);
+    themeToggle.textContent = "Light";
+    themeToggle.setAttribute("aria-pressed", nextTheme === "light" ? "true" : "false");
+    window.requestAnimationFrame(updateAllHeaderNavs);
+}
+
+function applyUiMode(mode) {
+    const nextMode = mode === "minimal" ? "minimal" : "default";
+    document.documentElement.dataset.uiMode = nextMode;
+    localStorage.setItem("demoUiMode", nextMode);
+    uiModeToggle.textContent = "Minimal";
+    uiModeToggle.setAttribute("aria-pressed", nextMode === "minimal" ? "true" : "false");
+    window.requestAnimationFrame(updateAllHeaderNavs);
+}
+
+function setAccountMenu(menu, isOpen) {
+    const button = menu.querySelector("[data-account-toggle]");
+    const popover = menu.querySelector("[data-account-popover]");
+
+    if (!button || !popover) {
+        return;
+    }
+
+    popover.hidden = !isOpen;
+    button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    button.setAttribute("aria-label", isOpen ? "Close account menu" : "Open account menu");
+}
+
+function closeAccountMenus(exceptMenu = null) {
+    for (const menu of document.querySelectorAll(".account-menu")) {
+        if (menu !== exceptMenu) {
+            setAccountMenu(menu, false);
+        }
+    }
+}
 
 function escapeHtml(value) {
     return String(value)
@@ -199,6 +286,20 @@ function renderHome() {
                 </div>
                 <span class="status ${job.status}">${job.status}</span>
             </a>
+        `)
+        .join("");
+}
+
+function renderOutputs() {
+    document.getElementById("outputs-table").innerHTML = jobs
+        .filter((job) => job.output)
+        .map((job) => `
+            <tr>
+                <td class="path">${escapeHtml(job.output)}</td>
+                <td class="path">${escapeHtml(job.input)}</td>
+                <td><span class="status ${job.status}">${job.status}</span></td>
+                <td><button type="button" class="primary" data-open-log>Download</button></td>
+            </tr>
         `)
         .join("");
 }
@@ -346,6 +447,7 @@ function resetDemoData() {
     jobs = initialJobs.map((job) => ({ ...job }));
     logs = logs.slice(-5);
     renderHome();
+    renderOutputs();
     renderLogs();
 }
 
@@ -363,10 +465,43 @@ function bindEvents() {
     });
 
     themeToggle.addEventListener("click", () => {
-        const root = document.documentElement;
-        const nextTheme = root.dataset.theme === "light" ? "dark" : "light";
-        root.dataset.theme = nextTheme;
-        themeToggle.textContent = nextTheme === "light" ? "Light mode" : "Dark mode";
+        applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+    });
+
+    uiModeToggle.addEventListener("click", () => {
+        applyUiMode(document.documentElement.dataset.uiMode === "minimal" ? "default" : "minimal");
+    });
+
+    for (const button of document.querySelectorAll("[data-menu-toggle]")) {
+        const header = button.closest(".topbar");
+        button.addEventListener("click", () => {
+            const isOpen = !header.classList.contains("nav-open");
+            header.classList.toggle("nav-open", isOpen);
+            setMenuState(button, isOpen);
+        });
+    }
+
+    for (const button of document.querySelectorAll("[data-account-toggle]")) {
+        const menu = button.closest(".account-menu");
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const popover = menu.querySelector("[data-account-popover]");
+            const isOpen = Boolean(popover && popover.hidden);
+            closeAccountMenus(menu);
+            setAccountMenu(menu, isOpen);
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        if (!event.target.closest(".account-menu")) {
+            closeAccountMenus();
+        }
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeAccountMenus();
+        }
     });
 
     document.getElementById("single-file-form").addEventListener("submit", (event) => {
@@ -392,6 +527,7 @@ function bindEvents() {
                 context: [["Job", "job-demo-new"], ["Provider", "mock"]],
             });
             renderHome();
+            renderOutputs();
             button.disabled = false;
             button.textContent = "Simulate Translation";
         }, 800);
@@ -495,9 +631,15 @@ function bindEvents() {
 }
 
 renderHome();
+renderOutputs();
 renderScanRows();
 renderBatches();
 renderSettings();
 renderLogs();
+applyTheme(localStorage.getItem("demoTheme") || "dark");
+applyUiMode(localStorage.getItem("demoUiMode") || "default");
 bindEvents();
 showPage(location.hash.slice(1) || "home");
+updateAllHeaderNavs();
+window.addEventListener("resize", updateAllHeaderNavs);
+window.addEventListener("load", updateAllHeaderNavs);
