@@ -103,8 +103,9 @@ Useful settings:
 - `ADMIN_PASSWORD`: admin login password. Use a strong unique value.
 - `SESSION_SECRET`: random 32+ character value used to sign session cookies.
 - `MEDIA_ROOT`: optional backend-accessible root folder for batch scans.
+- `NGINX_CLIENT_MAX_BODY_SIZE`: browser upload limit at the Nginx layer, default `10G` in Docker.
 - `TEMP_DIR`: app-managed temporary files, safe to clear from Settings.
-- `MAX_UPLOAD_MB`: single upload limit.
+- `MAX_UPLOAD_MB`: backend browser upload limit in MB, default `10240`.
 - `BATCH_FILE_CONCURRENCY`: concurrent files in batch mode, capped at 10.
 - `FFMPEG_TIMEOUT_SECONDS`: ffmpeg/ffprobe timeout.
 
@@ -163,6 +164,26 @@ services:
     environment:
       MEDIA_ROOT: /media
 ```
+
+For large media libraries, prefer mounted folder batch mode instead of browser uploads:
+
+```yaml
+services:
+  backend:
+    environment:
+      MEDIA_ROOT: /media
+    volumes:
+      - ./data:/app/data
+      - /srv/media:/media:ro
+```
+
+Then open Batch mode and enter a container path such as:
+
+```text
+/media/Shows
+```
+
+Docker browser uploads default to `10G` through Nginx (`NGINX_CLIENT_MAX_BODY_SIZE=10G`) and `10240` MB in the backend (`MAX_UPLOAD_MB=10240`), but mounted folders are still recommended for large videos because they avoid copying media into the app data volume.
 
 ## Docker Hub
 

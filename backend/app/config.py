@@ -126,7 +126,7 @@ class Settings:
     srt_batch_size: int = parse_int_env("SRT_BATCH_SIZE", 40)
     srt_max_chars: int = parse_int_env("SRT_MAX_CHARS", 12000)
     batch_file_concurrency: int = parse_int_env("BATCH_FILE_CONCURRENCY", 10)
-    max_upload_mb: int = parse_int_env("MAX_UPLOAD_MB", 100)
+    max_upload_mb: int = parse_int_env("MAX_UPLOAD_MB", 10240)
     ffmpeg_timeout_seconds: int = parse_int_env("FFMPEG_TIMEOUT_SECONDS", 120)
     openai_timeout_seconds: int = parse_int_env("OPENAI_TIMEOUT_SECONDS", 120)
     cancel_timeout_seconds: int = parse_int_env("CANCEL_TIMEOUT_SECONDS", 30)

@@ -196,12 +196,30 @@ def batches_page(request: Request):
             "runtime_warnings": runtime_warnings(),
             "translation_blockers": blockers,
             "can_translate": not blockers,
+            "media_root": str(settings.media_root) if settings.media_root else "",
+            "folder_placeholder": (
+                f"{settings.media_root}/Shows"
+                if settings.media_root
+                else "C:\\Media\\TV Show or /media/Shows"
+            ),
+            "folder_picker_enabled": settings.media_root is None,
         },
     )
 
 
 @router.post("/pick-folder")
 def pick_batch_folder():
+    if settings.media_root is not None:
+        return JSONResponse(
+            {
+                "error": (
+                    "Folder picker is disabled because MEDIA_ROOT is configured. "
+                    f"Type a mounted folder path such as {settings.media_root}/Shows."
+                )
+            },
+            status_code=503,
+        )
+
     try:
         import tkinter as tk
         from tkinter import filedialog

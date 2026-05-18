@@ -37,9 +37,16 @@
                     <div>
                         <label for="folder_path">Root folder</label>
                         <div class="folder-path-control">
-                            <input id="folder_path" name="folder_path" type="text" placeholder="C:\Media\TV Show" required>
-                            <button type="button" class="secondary" id="pick-folder-button">Browse</button>
+                            <input id="folder_path" name="folder_path" type="text" placeholder="{{ folder_placeholder }}" required>
+                            {% if folder_picker_enabled %}
+                                <button type="button" class="secondary" id="pick-folder-button">Browse</button>
+                            {% endif %}
                         </div>
+                        {% if media_root %}
+                            <p class="field-hint">Docker batch mode uses mounted paths. Enter a folder under <code>{{ media_root }}</code>, such as <code>{{ media_root }}/Shows</code>.</p>
+                        {% else %}
+                            <p class="field-hint">In Docker or on a server, type the mounted container path manually, such as <code>/media/Shows</code>.</p>
+                        {% endif %}
                     </div>
 
                     <div>
@@ -411,7 +418,7 @@
             }
         });
 
-        pickFolderButton.addEventListener("click", async () => {
+        pickFolderButton?.addEventListener("click", async () => {
             errorBox.textContent = "";
             pickFolderButton.disabled = true;
             pickFolderButton.textContent = "Opening...";

@@ -49,6 +49,7 @@ def home(request: Request):
             "runtime_warnings": runtime_warnings(),
             "translation_blockers": blockers,
             "can_translate": not blockers,
+            "max_upload_mb": settings.max_upload_mb,
             "recent_outputs": recent_outputs,
         },
     )
@@ -113,7 +114,10 @@ async def create_translation_job(
                 if written > max_bytes:
                     raise HTTPException(
                         status_code=413,
-                        detail=f"File is larger than {settings.max_upload_mb} MB.",
+                        detail=(
+                            f"File is larger than the browser upload limit of {settings.max_upload_mb} MB. "
+                            "For large videos or media libraries, mount the folder in Docker and use Batch mode with a path such as /media/Shows."
+                        ),
                     )
 
                 f.write(chunk)

@@ -38,9 +38,9 @@
             <div class="panel-heading">
                 <div>
                     <h2>New Translation</h2>
-                    <p class="hint">Files stay local. Subtitle text is sent only while translating.</p>
+                    <p class="hint">Browser uploads are best for subtitles and smaller videos. For large media libraries, mount a folder and use Batch mode.</p>
                 </div>
-                <span class="pill">Natural subtitle translation</span>
+                <span class="pill">Upload limit: {{ max_upload_mb }} MB</span>
             </div>
 
             <form id="single-file-form" action="/jobs" method="post" enctype="multipart/form-data">
@@ -182,6 +182,12 @@
 
                 if (!response.ok) {
                     let message = "Could not start translation.";
+
+                    if (response.status === 413) {
+                        throw new Error(
+                            "File too large for browser upload. For large videos, mount your media folder in Docker and use Batch mode with a path such as /media/Shows."
+                        );
+                    }
 
                     try {
                         const payload = await response.json();
