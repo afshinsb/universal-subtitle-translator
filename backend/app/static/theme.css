@@ -977,6 +977,20 @@ th {
     text-transform: uppercase;
 }
 
+.select-cell {
+    width: 44px;
+    text-align: center;
+}
+
+table .select-cell input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--accent);
+}
+
 tr:hover td {
     background: color-mix(in srgb, var(--surface-2) 55%, transparent);
 }

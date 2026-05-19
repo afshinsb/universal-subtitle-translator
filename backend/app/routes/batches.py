@@ -432,6 +432,8 @@ def create_folder_batch(
     style: str = Form(settings.default_style),
     overwrite_existing: bool = Form(False),
     max_concurrency: int = Form(10),
+    batch_selection_enabled: bool = Form(False),
+    selected_files: list[str] | None = Form(None),
 ):
     blockers = translation_blockers()
 
@@ -445,6 +447,11 @@ def create_folder_batch(
     target_language = validate_language(target_language)
     style = validate_style(style)
     overwrite_existing = parse_checkbox(overwrite_existing)
+    batch_selection_enabled = parse_checkbox(batch_selection_enabled)
+    selected_files = selected_files or []
+
+    if batch_selection_enabled and not selected_files:
+        raise HTTPException(status_code=400, detail="Select at least one file to translate.")
 
     batch_id = str(uuid4())
 
@@ -465,6 +472,7 @@ def create_folder_batch(
             "source_preference": INTERNAL_SOURCE_PREFERENCE,
             "overwrite_existing": overwrite_existing,
             "max_concurrency": max_concurrency,
+            "selected_files": selected_files if batch_selection_enabled else None,
         },
         daemon=True,
     )

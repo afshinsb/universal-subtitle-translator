@@ -84,7 +84,7 @@
         </section>
 
         <section class="panel">
-            <h2>All Files</h2>
+            <h2>Translation Files</h2>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -99,6 +99,20 @@
                     <tbody id="jobs-table"></tbody>
                 </table>
             </div>
+            <details class="advanced-options" id="skipped-details" hidden>
+                <summary id="skipped-summary">Skipped files</summary>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>File</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="skipped-jobs-table"></tbody>
+                    </table>
+                </div>
+            </details>
         </section>
 
         {% include "_footer.html" %}
@@ -115,6 +129,9 @@
         const totalBar = document.getElementById("total-bar");
         const activeFilesEl = document.getElementById("active-files");
         const jobsTable = document.getElementById("jobs-table");
+        const skippedDetails = document.getElementById("skipped-details");
+        const skippedSummary = document.getElementById("skipped-summary");
+        const skippedJobsTable = document.getElementById("skipped-jobs-table");
         const cancelButton = document.getElementById("cancel-button");
         const copyLogsButton = document.getElementById("copy-logs-button");
         const completionPanel = document.getElementById("completion-panel");
@@ -125,6 +142,10 @@
 
         function percent(job) {
             return Number(job.progress_percent || 0);
+        }
+
+        function isSkippedJob(job) {
+            return job.status === "skipped";
         }
 
         function setBar(element, value) {
@@ -179,44 +200,68 @@
 
         function renderJobs(jobs) {
             jobsTable.innerHTML = "";
+            const visibleJobs = jobs.filter((job) => !isSkippedJob(job));
+            const skippedJobs = jobs.filter(isSkippedJob);
 
-            if (!jobs.length) {
+            if (!visibleJobs.length) {
                 const row = document.createElement("tr");
                 const cell = document.createElement("td");
                 const empty = document.createElement("div");
                 cell.colSpan = 5;
                 empty.className = "empty-state";
-                empty.textContent = "Waiting for files...";
+                empty.textContent = skippedJobs.length ? "No translation files selected." : "Waiting for files...";
                 cell.appendChild(empty);
                 row.appendChild(cell);
                 jobsTable.appendChild(row);
-                return;
+            } else {
+                for (const job of visibleJobs) {
+                    const row = document.createElement("tr");
+                    const file = document.createElement("td");
+                    const status = document.createElement("td");
+                    const progress = document.createElement("td");
+                    const step = document.createElement("td");
+                    const subtitles = document.createElement("td");
+                    const statusBadge = document.createElement("span");
+
+                    file.className = "path";
+                    file.textContent = job.input_file || "-";
+                    statusBadge.className = `status ${job.status || ""}`;
+                    statusBadge.textContent = job.status || "-";
+                    status.appendChild(statusBadge);
+                    step.textContent = job.message || "-";
+                    progress.textContent = `${percent(job)}%`;
+                    subtitles.textContent = `${job.translated_count || 0} / ${job.total_subtitles || 0}`;
+
+                    row.appendChild(file);
+                    row.appendChild(status);
+                    row.appendChild(step);
+                    row.appendChild(subtitles);
+                    row.appendChild(progress);
+                    jobsTable.appendChild(row);
+                }
             }
+
+            renderSkippedJobs(skippedJobs);
+        }
+
+        function renderSkippedJobs(jobs) {
+            skippedJobsTable.innerHTML = "";
+            skippedDetails.hidden = jobs.length === 0;
+            skippedSummary.textContent = `Skipped files (${jobs.length})`;
 
             for (const job of jobs) {
                 const row = document.createElement("tr");
                 const file = document.createElement("td");
-                const status = document.createElement("td");
-                const progress = document.createElement("td");
-                const step = document.createElement("td");
-                const subtitles = document.createElement("td");
-                const statusBadge = document.createElement("span");
+                const reason = document.createElement("td");
 
                 file.className = "path";
+                reason.className = "path";
                 file.textContent = job.input_file || "-";
-                statusBadge.className = `status ${job.status || ""}`;
-                statusBadge.textContent = job.status || "-";
-                status.appendChild(statusBadge);
-                step.textContent = job.message || "-";
-                progress.textContent = `${percent(job)}%`;
-                subtitles.textContent = `${job.translated_count || 0} / ${job.total_subtitles || 0}`;
+                reason.textContent = job.message || "-";
 
                 row.appendChild(file);
-                row.appendChild(status);
-                row.appendChild(step);
-                row.appendChild(subtitles);
-                row.appendChild(progress);
-                jobsTable.appendChild(row);
+                row.appendChild(reason);
+                skippedJobsTable.appendChild(row);
             }
         }
 

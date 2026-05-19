@@ -35,6 +35,7 @@
 
         <section class="panel">
             <form id="batch-form">
+                <input id="batch-selection-enabled" name="batch_selection_enabled" type="hidden" value="false">
                 <div class="batch-translate-grid">
                     <div>
                         <label for="folder_path">Mounted file or folder path</label>
@@ -132,6 +133,9 @@
                 <table>
                     <thead>
                         <tr>
+                            <th class="select-cell">
+                                <input id="select-all-files" type="checkbox" checked aria-label="Select all files to process">
+                            </th>
                             <th>Video</th>
                             <th>Subfolder</th>
                             <th>Source</th>
@@ -224,9 +228,27 @@
         const fileCount = document.getElementById("file-count");
         const skippedCount = document.getElementById("skipped-count");
         const subtitleCount = document.getElementById("subtitle-count");
+        const selectAllFiles = document.getElementById("select-all-files");
+        const batchSelectionEnabled = document.getElementById("batch-selection-enabled");
         let scanPollTimer = null;
         let currentScanId = null;
         const canTranslate = {{ "true" if can_translate else "false" }};
+
+        function selectedFileCheckboxes() {
+            return Array.from(scanTable.querySelectorAll("input[name='selected_files']"));
+        }
+
+        function updateSelectionState() {
+            const checkboxes = selectedFileCheckboxes();
+            const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+
+            selectAllFiles.checked = checkboxes.length > 0 && selectedCount === checkboxes.length;
+            selectAllFiles.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+            fileCount.textContent = checkboxes.length
+                ? `${selectedCount} of ${checkboxes.length} files selected`
+                : "0 files to process";
+            startButton.disabled = checkboxes.length === 0 || selectedCount === 0 || !canTranslate;
+        }
 
         function setBusy(isBusy, label = "Scan Path") {
             scanButton.disabled = isBusy;
@@ -248,6 +270,9 @@
             results.hidden = true;
             startButton.dataset.ready = "false";
             startButton.disabled = true;
+            batchSelectionEnabled.value = "false";
+            selectAllFiles.checked = true;
+            selectAllFiles.indeterminate = false;
         }
 
         function markScanInputsChanged() {
@@ -281,6 +306,8 @@
 
             for (const file of payload.files) {
                 const row = document.createElement("tr");
+                const selectCell = document.createElement("td");
+                const selectInput = document.createElement("input");
                 const videoCell = document.createElement("td");
                 const folderCell = document.createElement("td");
                 const sourceCell = document.createElement("td");
@@ -290,9 +317,18 @@
                 const countCell = document.createElement("td");
                 const outputCell = document.createElement("td");
 
+                selectCell.className = "select-cell";
                 videoCell.className = "path";
                 folderCell.className = "path";
                 outputCell.className = "path";
+                selectInput.type = "checkbox";
+                selectInput.name = "selected_files";
+                selectInput.value = file.relative_path;
+                selectInput.checked = true;
+                selectInput.setAttribute("form", "batch-form");
+                selectInput.setAttribute("aria-label", `Translate ${file.relative_path}`);
+                selectInput.addEventListener("change", updateSelectionState);
+                selectCell.appendChild(selectInput);
                 sourceReason.className = "file-subtext";
                 videoCell.textContent = file.relative_path;
                 folderCell.textContent = file.subfolder || ".";
@@ -310,6 +346,7 @@
                     outputCell.appendChild(outputNote);
                 }
 
+                row.appendChild(selectCell);
                 row.appendChild(videoCell);
                 row.appendChild(folderCell);
                 row.appendChild(sourceCell);
@@ -342,7 +379,8 @@
             scanEmpty.hidden = payload.total_files > 0;
             results.hidden = false;
             startButton.dataset.ready = payload.total_files > 0 ? "true" : "false";
-            startButton.disabled = payload.total_files === 0 || !canTranslate;
+            batchSelectionEnabled.value = payload.total_files > 0 ? "true" : "false";
+            updateSelectionState();
         }
 
         async function pollScan(scanId) {
@@ -464,9 +502,22 @@
             await window.UST.authFetch(`/batches/scan/${currentScanId}/cancel`, { method: "POST" });
         });
 
+        selectAllFiles.addEventListener("change", () => {
+            for (const checkbox of selectedFileCheckboxes()) {
+                checkbox.checked = selectAllFiles.checked;
+            }
+
+            updateSelectionState();
+        });
+
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             errorBox.textContent = "";
+
+            if (batchSelectionEnabled.value === "true" && selectedFileCheckboxes().every((checkbox) => !checkbox.checked)) {
+                errorBox.textContent = "Select at least one file to translate.";
+                return;
+            }
 
             const overwrite = form.querySelector("[name='overwrite_existing']").checked;
 

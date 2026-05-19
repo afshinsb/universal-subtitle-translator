@@ -1332,6 +1332,7 @@ def run_folder_batch_job(
     source_preference: str = DEFAULT_SOURCE_PREFERENCE,
     overwrite_existing: bool = False,
     max_concurrency: int | None = None,
+    selected_files: list[str] | None = None,
 ) -> None:
     register_active_batch(batch_id)
     batch_started_at = time.monotonic()
@@ -1370,6 +1371,24 @@ def run_folder_batch_job(
         check_cancelled(batch_id=batch_id)
         scanned_files = scan_result["items"]
         skipped_files = scan_result["skipped"]
+        selected_file_set = set(selected_files or [])
+
+        if selected_files is not None:
+            before_selection = len(scanned_files)
+            scanned_files = [
+                item
+                for item in scanned_files
+                if item["relative_path"] in selected_file_set
+            ]
+
+            add_log(
+                batch_id=batch_id,
+                level="INFO",
+                event="batch_file_selection_applied",
+                message=f"User selected {len(scanned_files)} of {before_selection} ready files for translation.",
+                model=settings.openai_model,
+            )
+
         total_files = len(scanned_files) + len(skipped_files)
 
         add_log(
