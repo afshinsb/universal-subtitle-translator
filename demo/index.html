@@ -24,22 +24,37 @@
                 <a href="#batch" data-page-link="batch">Batch</a>
                 <a href="#outputs" data-page-link="outputs">Outputs</a>
                 <a href="#about" data-page-link="about">About</a>
-                <a href="#settings" data-page-link="settings">Settings</a>
-                <a href="#logs" data-page-link="logs">Logs</a>
                 <div class="account-menu">
                     <button type="button" class="account-button" data-account-toggle aria-expanded="false" aria-label="Open account menu">Account</button>
                     <div class="account-popover" data-account-popover hidden>
                         <div class="account-summary">
-                            <span>Signed in</span>
-                            <strong>demo</strong>
+                            <span class="account-avatar" aria-hidden="true">D</span>
+                            <div>
+                                <span>Signed in</span>
+                                <strong>demo</strong>
+                            </div>
+                        </div>
+                        <div class="account-menu-section">
+                            <span class="account-menu-label">Manage</span>
+                            <div class="account-menu-list">
+                                <a href="#settings" data-page-link="settings">
+                                    <span>Settings</span>
+                                </a>
+                                <a href="#logs" data-page-link="logs">
+                                    <span>Logs</span>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="account-menu-section">
+                            <span class="account-menu-label">Display</span>
+                            <span class="mode-controls" aria-label="Display controls">
+                                <button type="button" class="ui-mode-toggle" data-ui-mode-toggle aria-pressed="false">Minimal</button>
+                                <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Light</button>
+                            </span>
                         </div>
                         <button type="button" class="secondary nav-logout-button" disabled>Logout</button>
                     </div>
                 </div>
-                <span class="mode-controls" aria-label="Display controls">
-                    <button type="button" class="ui-mode-toggle" data-ui-mode-toggle aria-pressed="false">Minimal</button>
-                    <button type="button" class="theme-toggle" data-theme-toggle aria-pressed="false">Light</button>
-                </span>
             </nav>
         </header>
 
@@ -77,19 +92,28 @@
                         <div>
                             <label>Subtitle or video file</label>
                             <input value="Demo.Movie.en.srt" disabled>
-                            <p class="field-hint">The real app accepts .srt and supported video files. Demo mode never reads local files.</p>
                         </div>
 
                         <div>
                             <label>Target language</label>
                             <select name="target_language">
                                 <option selected>Persian</option>
+                                <option>English</option>
+                                <option>Arabic</option>
+                                <option>Turkish</option>
                                 <option>Spanish</option>
                                 <option>French</option>
-                                <option>Arabic</option>
+                                <option>German</option>
+                                <option>Italian</option>
+                                <option>Portuguese</option>
+                                <option>Russian</option>
+                                <option>Japanese</option>
+                                <option>Korean</option>
+                                <option>Chinese</option>
                             </select>
                         </div>
                     </div>
+                    <p class="field-hint demo-form-hint">The real app accepts .srt and supported video files. Demo mode never reads local files.</p>
 
                     <details class="advanced-options">
                         <summary>Advanced</summary>
@@ -98,13 +122,6 @@
                                 <input name="overwrite_existing" type="checkbox" value="true">
                                 Overwrite existing subtitle
                             </label>
-                            <div class="source-language-field">
-                                <label>Source language</label>
-                                <select name="source_language" aria-label="Source language">
-                                    <option selected>Auto detect</option>
-                                </select>
-                            </div>
-
                             <div>
                                 <label>Translation style</label>
                                 <select name="style">
@@ -165,9 +182,18 @@
                             <label for="target_language">Target language</label>
                             <select id="target_language" name="target_language">
                                 <option selected>Persian</option>
+                                <option>English</option>
+                                <option>Arabic</option>
+                                <option>Turkish</option>
                                 <option>Spanish</option>
                                 <option>French</option>
-                                <option>Arabic</option>
+                                <option>German</option>
+                                <option>Italian</option>
+                                <option>Portuguese</option>
+                                <option>Russian</option>
+                                <option>Japanese</option>
+                                <option>Korean</option>
+                                <option>Chinese</option>
                             </select>
                         </div>
                     </div>

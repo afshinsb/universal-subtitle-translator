@@ -457,6 +457,11 @@ function bindEvents() {
         if (pageLink) {
             event.preventDefault();
             showPage(pageLink.dataset.pageLink);
+            closeAccountMenus();
+            const header = pageLink.closest(".topbar");
+            if (header) {
+                closeHeaderNav(header);
+            }
         }
 
         if (event.target.matches("[data-open-log]")) {

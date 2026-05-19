@@ -609,10 +609,6 @@ h2 {
     align-items: end;
 }
 
-.source-language-field {
-    display: none;
-}
-
 .minimal-heading {
     display: none;
 }
@@ -1796,10 +1792,6 @@ code {
 
 :root[data-ui-mode="minimal"] .batch-translate-grid {
     grid-template-columns: minmax(320px, 1fr) minmax(170px, 220px);
-}
-
-:root[data-ui-mode="minimal"] .source-language-field {
-    display: block;
 }
 
 :root[data-ui-mode="minimal"] .actions {

@@ -172,6 +172,15 @@ a {
     box-shadow: none;
 }
 
+.topbar.nav-collapsed .account-popover::before {
+    content: none;
+}
+
+.topbar.nav-collapsed .account-popover .account-menu-list a {
+    justify-content: space-between;
+    text-align: left;
+}
+
 .nav a,
 .ui-mode-toggle,
 .theme-toggle,
@@ -256,6 +265,18 @@ button:hover {
 .account-button {
     min-height: 38px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-color: color-mix(in srgb, var(--line) 82%, transparent);
+    background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.account-button:hover,
+.account-button[aria-expanded="true"] {
+    border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+    background: color-mix(in srgb, var(--accent) 9%, var(--surface-2));
 }
 
 .account-button::after {
@@ -263,48 +284,203 @@ button:hover {
     display: inline-block;
     width: 0;
     height: 0;
-    margin-left: 7px;
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-top: 5px solid currentColor;
     vertical-align: middle;
+    transition: transform 0.16s ease;
+}
+
+.account-button[aria-expanded="true"]::after {
+    transform: rotate(180deg);
 }
 
 .account-popover {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 10px);
     right: 0;
     z-index: 20;
-    width: 220px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    width: 268px;
+    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface) 96%, var(--surface-2));
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
     padding: 10px;
 }
 
-.account-summary {
-    display: grid;
-    gap: 2px;
-    padding: 4px 4px 10px;
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 10px;
+.account-popover::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    right: 22px;
+    width: 10px;
+    height: 10px;
+    border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    background: inherit;
+    transform: rotate(45deg);
 }
 
-.account-summary span {
+.account-summary {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 6px 6px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 58%, transparent);
+    margin-bottom: 7px;
+}
+
+.account-avatar {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.account-summary div span {
     color: var(--muted);
-    font-size: 12px;
-    font-weight: 800;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
 }
 
 .account-summary strong {
+    display: block;
+    margin-top: 2px;
     overflow-wrap: anywhere;
+    line-height: 1.15;
+    font-size: 14px;
+}
+
+.account-menu-section {
+    display: grid;
+    gap: 7px;
+    padding: 7px 0;
+}
+
+.account-menu-section + .account-menu-section {
+    border-top: 1px solid color-mix(in srgb, var(--line) 58%, transparent);
+}
+
+.account-menu-label {
+    padding: 0 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.account-menu-list {
+    display: grid;
+    gap: 4px;
+}
+
+.account-menu-list a {
+    display: flex;
+    position: relative;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-weight: 800;
+    text-decoration: none;
+    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.account-menu-list a:hover {
+    background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+    color: var(--text);
+}
+
+.account-menu-list a.active {
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
+    background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+    color: var(--text);
+}
+
+.account-menu-list a.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 3px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.account-popover .mode-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    width: 100%;
+    margin: 0;
+    border: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
+    border-radius: 10px;
+    padding: 3px;
+    overflow: visible;
+    background: color-mix(in srgb, var(--surface-2) 52%, transparent);
+}
+
+.account-popover .mode-controls .theme-toggle,
+.account-popover .mode-controls .ui-mode-toggle {
+    justify-content: center;
+    min-height: 34px;
+    border: 0;
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 13px;
+    color: var(--muted);
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.account-popover .mode-controls .theme-toggle:hover,
+.account-popover .mode-controls .ui-mode-toggle:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--surface-3) 54%, transparent);
+}
+
+.account-popover .mode-controls .theme-toggle[aria-pressed="true"],
+.account-popover .mode-controls .ui-mode-toggle[aria-pressed="true"] {
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface-3));
+}
+
+.account-popover .mode-controls .theme-toggle::before,
+.account-popover .mode-controls .ui-mode-toggle::before {
+    content: none;
+}
+
+.account-popover .mode-controls .theme-toggle {
+    border-left: 0;
 }
 
 .nav-logout-button {
     width: 100%;
     min-height: 38px;
+    margin-top: 7px;
+    border-color: transparent;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+    color: var(--muted);
+    transition: background 0.14s ease, color 0.14s ease;
+}
+
+.nav-logout-button:hover {
+    border-color: color-mix(in srgb, var(--danger) 20%, var(--line));
+    background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
+    color: var(--text);
 }
 
 .page-header {
@@ -371,8 +547,7 @@ h2 {
     padding: 28px;
 }
 
-.minimal-heading,
-.source-language-field {
+.minimal-heading {
     display: none;
 }
 
@@ -531,6 +706,11 @@ label {
     margin: 8px 0 0;
     color: var(--muted);
     font-size: 13px;
+}
+
+.demo-form-hint {
+    margin-top: 8px;
+    margin-bottom: 0;
 }
 
 input,
@@ -1267,6 +1447,19 @@ code {
     content: "";
 }
 
+:root[data-ui-mode="minimal"] .account-popover .account-menu-list a[href="#settings"],
+:root[data-ui-mode="minimal"] .account-popover .account-menu-list a[href="#logs"] {
+    width: 100%;
+    overflow: visible;
+    color: var(--text);
+    opacity: 1;
+}
+
+:root[data-ui-mode="minimal"] .account-popover .account-menu-list a[href="#settings"]::after,
+:root[data-ui-mode="minimal"] .account-popover .account-menu-list a[href="#logs"]::after {
+    content: none;
+}
+
 :root[data-ui-mode="minimal"] .nav a,
 :root[data-ui-mode="minimal"] .theme-toggle,
 :root[data-ui-mode="minimal"] .ui-mode-toggle,
@@ -1307,10 +1500,6 @@ code {
 
 :root[data-ui-mode="minimal"] .batch-translate-grid {
     grid-template-columns: minmax(320px, 1fr) minmax(170px, 220px);
-}
-
-:root[data-ui-mode="minimal"] .source-language-field {
-    display: block;
 }
 
 :root[data-ui-mode="minimal"] .actions {
