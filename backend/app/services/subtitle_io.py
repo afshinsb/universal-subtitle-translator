@@ -288,14 +288,14 @@ def batch_subtitles(
     if max_estimated_tokens is None:
         max_estimated_tokens = max(500, min(6000, max_chars // 2))
 
-    for index, sub in enumerate(subs):
+    for sub in subs:
         text = clean_subtitle_text(sub.text)
 
         if not text:
             continue
 
         item = {
-            "index": index,
+            "index": sub.index,
             "text": text,
         }
 

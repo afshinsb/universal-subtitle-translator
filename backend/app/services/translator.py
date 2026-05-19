@@ -97,9 +97,20 @@ class TranslationResult:
     output_tokens: int
     total_tokens: int
     raw_output: str
+    returned_indexes: list[int]
+    duplicate_indexes: list[int]
+    malformed_block_count: int
     attempts: int = 1
     retry_attempted: bool = False
     retry_reason: str | None = None
+
+
+@dataclass
+class ParsedTranslationBlocks:
+    translations: dict[int, str]
+    returned_indexes: list[int]
+    duplicate_indexes: list[int]
+    malformed_block_count: int
 
 
 def get_openai_client() -> OpenAI:
@@ -257,17 +268,39 @@ def build_batch_prompt(
     )
 
 
-def parse_translated_blocks(text: str) -> dict[int, str]:
+def parse_translated_blocks(text: str) -> ParsedTranslationBlocks:
     pattern = r"BEGIN\[(\d+)\]\s*(.*?)\s*END\[\1\]"
     matches = re.findall(pattern, text, flags=re.DOTALL)
 
     result = {}
+    returned_indexes = []
+    duplicate_indexes = []
+    seen_indexes = set()
 
     for index_text, translated_text in matches:
         index = int(index_text)
+        returned_indexes.append(index)
+
+        if index in seen_indexes and index not in duplicate_indexes:
+            duplicate_indexes.append(index)
+
+        seen_indexes.add(index)
         result[index] = translated_text.strip().replace(LINE_BREAK_TOKEN, "\n")
 
-    return result
+    begin_count = len(re.findall(r"BEGIN\[\d+\]", text))
+    end_count = len(re.findall(r"END\[\d+\]", text))
+    malformed_block_count = max(begin_count, end_count) - len(matches)
+
+    return ParsedTranslationBlocks(
+        translations=result,
+        returned_indexes=returned_indexes,
+        duplicate_indexes=duplicate_indexes,
+        malformed_block_count=max(0, malformed_block_count),
+    )
+
+
+def parse_translated_block_text(text: str) -> dict[int, str]:
+    return parse_translated_blocks(text).translations
 
 
 def call_openai(prompt: str) -> TranslationResult:
@@ -298,11 +331,14 @@ def call_openai(prompt: str) -> TranslationResult:
     total_tokens = getattr(usage, "total_tokens", 0) if usage else 0
 
     return TranslationResult(
-        translations=parsed,
+        translations=parsed.translations,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         total_tokens=total_tokens,
         raw_output=output_text,
+        returned_indexes=parsed.returned_indexes,
+        duplicate_indexes=parsed.duplicate_indexes,
+        malformed_block_count=parsed.malformed_block_count,
     )
 
 

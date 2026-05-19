@@ -42,9 +42,14 @@ ACTIVE_BATCHES: set[str] = set()
 ACTIVE_JOBS: set[str] = set()
 ACTIVE_LOCK = threading.RLock()
 TERMINAL_STATUSES = {"done", "failed", "cancelled", "skipped", "interrupted"}
+BATCH_ALIGNMENT_ATTEMPTS = 2
 
 
 class CancelledError(RuntimeError):
+    pass
+
+
+class BatchAlignmentError(RuntimeError):
     pass
 
 
@@ -388,6 +393,87 @@ def get_batch_range(batch: list[dict]) -> tuple[int | None, int | None]:
     return min(indexes), max(indexes)
 
 
+def batch_indexes(batch: list[dict]) -> list[int]:
+    return [item["index"] for item in batch]
+
+
+def duplicate_values(values: list[int]) -> list[int]:
+    seen = set()
+    duplicates = []
+
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+
+        seen.add(value)
+
+    return duplicates
+
+
+def validate_translation_alignment(batch: list[dict], result) -> dict:
+    expected_indexes = batch_indexes(batch)
+    returned_indexes = list(result.returned_indexes)
+    expected_set = set(expected_indexes)
+    returned_set = set(returned_indexes)
+    expected_duplicate_indexes = duplicate_values(expected_indexes)
+    duplicate_indexes = sorted(set(result.duplicate_indexes or duplicate_values(returned_indexes)))
+    missing_indexes = [index for index in expected_indexes if index not in returned_set]
+    extra_indexes = [index for index in returned_indexes if index not in expected_set]
+    unique_returned_in_order = []
+
+    for index in returned_indexes:
+        if index in expected_set and index not in unique_returned_in_order:
+            unique_returned_in_order.append(index)
+
+    reordered = not missing_indexes and not extra_indexes and not duplicate_indexes and unique_returned_in_order != expected_indexes
+
+    return {
+        "passed": (
+            len(returned_indexes) == len(expected_indexes)
+            and returned_set == expected_set
+            and not expected_duplicate_indexes
+            and not duplicate_indexes
+            and not reordered
+            and result.malformed_block_count == 0
+        ),
+        "expected_indexes": expected_indexes,
+        "returned_indexes": returned_indexes,
+        "expected_count": len(expected_indexes),
+        "returned_count": len(returned_indexes),
+        "parsed_count": len(result.translations),
+        "expected_duplicate_indexes": expected_duplicate_indexes,
+        "missing_indexes": missing_indexes,
+        "extra_indexes": extra_indexes,
+        "duplicate_indexes": duplicate_indexes,
+        "reordered": reordered,
+        "malformed_block_count": result.malformed_block_count,
+    }
+
+
+def alignment_debug_message(report: dict) -> str:
+    return (
+        f"Expected ids: {report['expected_indexes']}. "
+        f"Returned ids: {report['returned_indexes']}. "
+        f"Counts: expected={report['expected_count']}, returned={report['returned_count']}, "
+        f"parsed_unique={report['parsed_count']}. "
+        f"Expected duplicates: {report['expected_duplicate_indexes']}. "
+        f"Missing: {report['missing_indexes']}. Extra: {report['extra_indexes']}. "
+        f"Duplicates: {report['duplicate_indexes']}. "
+        f"Malformed blocks: {report['malformed_block_count']}. "
+        f"Reordered: {report['reordered']}."
+    )
+
+
+def build_srt_index_to_list_pos(subs) -> dict[int, int]:
+    srt_indexes = [sub.index for sub in subs]
+    duplicate_srt_indexes = duplicate_values(srt_indexes)
+
+    if duplicate_srt_indexes:
+        raise BatchAlignmentError(f"Duplicate SRT subtitle indexes found: {duplicate_srt_indexes}")
+
+    return {sub.index: list_pos for list_pos, sub in enumerate(subs)}
+
+
 def translate_batch_with_repair(
     job_id: str,
     batch: list[dict],
@@ -402,27 +488,84 @@ def translate_batch_with_repair(
         cancel_check()
 
     start_index, end_index = get_batch_range(batch)
+    result = None
+    report = None
 
-    request_started_at = time.monotonic()
-    result = translate_batch(
-        batch=batch,
-        target_language=target_language,
-        style=style,
-        source_language=source_language,
-    )
-    request_duration = elapsed_seconds(request_started_at)
+    for alignment_attempt in range(1, BATCH_ALIGNMENT_ATTEMPTS + 1):
+        request_started_at = time.monotonic()
+        result = translate_batch(
+            batch=batch,
+            target_language=target_language,
+            style=style,
+            source_language=source_language,
+        )
+        request_duration = elapsed_seconds(request_started_at)
 
-    if cancel_check:
-        cancel_check()
+        if cancel_check:
+            cancel_check()
 
-    if result.retry_attempted:
+        report = validate_translation_alignment(batch, result)
+
+        if result.retry_attempted:
+            add_log(
+                job_id=job_id,
+                level="WARNING",
+                event="provider_retry_attempted",
+                message=(
+                    f"Provider retry used for batch {batch_number}/{batch_count}. "
+                    f"Reason: {result.retry_reason}"
+                ),
+                model=settings.openai_model,
+                batch_number=batch_number,
+                batch_count=batch_count,
+                subtitle_start=start_index,
+                subtitle_end=end_index,
+            )
+
+        add_log(
+            job_id=job_id,
+            level="INFO",
+            event="provider_request_completed",
+            message=(
+                f"Provider request completed for batch {batch_number}/{batch_count} "
+                f"in {request_duration}s. Items: {len(batch)}. "
+                f"Tokens: {result.total_tokens} total "
+                f"({result.input_tokens} in, {result.output_tokens} out). "
+                f"Attempts: {result.attempts}. Alignment attempt: {alignment_attempt}. "
+                f"{provider_cost_text(result.input_tokens, result.output_tokens)}. "
+                f"{alignment_debug_message(report)}"
+            ),
+            model=settings.openai_model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            total_tokens=result.total_tokens,
+            batch_number=batch_number,
+            batch_count=batch_count,
+            subtitle_start=start_index,
+            subtitle_end=end_index,
+        )
+
+        if report["passed"]:
+            add_log(
+                job_id=job_id,
+                level="INFO",
+                event="batch_alignment_validated",
+                message=f"Batch {batch_number}/{batch_count} alignment validated. {alignment_debug_message(report)}",
+                model=settings.openai_model,
+                batch_number=batch_number,
+                batch_count=batch_count,
+                subtitle_start=start_index,
+                subtitle_end=end_index,
+            )
+            break
+
         add_log(
             job_id=job_id,
             level="WARNING",
-            event="provider_retry_attempted",
+            event="batch_alignment_mismatch",
             message=(
-                f"Provider retry used for batch {batch_number}/{batch_count}. "
-                f"Reason: {result.retry_reason}"
+                f"Batch {batch_number}/{batch_count} returned mismatched subtitle ids "
+                f"on alignment attempt {alignment_attempt}. {alignment_debug_message(report)}"
             ),
             model=settings.openai_model,
             batch_number=batch_number,
@@ -431,26 +574,20 @@ def translate_batch_with_repair(
             subtitle_end=end_index,
         )
 
-    add_log(
-        job_id=job_id,
-        level="INFO",
-        event="provider_request_completed",
-        message=(
-            f"Provider request completed for batch {batch_number}/{batch_count} "
-            f"in {request_duration}s. Items: {len(batch)}. "
-            f"Tokens: {result.total_tokens} total "
-            f"({result.input_tokens} in, {result.output_tokens} out). "
-            f"Attempts: {result.attempts}. {provider_cost_text(result.input_tokens, result.output_tokens)}."
-        ),
-        model=settings.openai_model,
-        input_tokens=result.input_tokens,
-        output_tokens=result.output_tokens,
-        total_tokens=result.total_tokens,
-        batch_number=batch_number,
-        batch_count=batch_count,
-        subtitle_start=start_index,
-        subtitle_end=end_index,
-    )
+    if result is None or report is None:
+        raise BatchAlignmentError(f"Translation alignment failed for batch {batch_number}/{batch_count}.")
+
+    if not report["passed"] and (
+        report["expected_duplicate_indexes"]
+        or report["extra_indexes"]
+        or report["duplicate_indexes"]
+        or report["reordered"]
+        or report["malformed_block_count"]
+    ):
+        raise BatchAlignmentError(
+            f"Translation alignment failed for batch {batch_number}/{batch_count}. "
+            f"{alignment_debug_message(report)}"
+        )
 
     translated = result.translations
 
@@ -485,6 +622,7 @@ def translate_batch_with_repair(
             source_language=source_language,
         )
         repair_duration = elapsed_seconds(repair_started_at)
+        repair_report = validate_translation_alignment([item], repair_result)
 
         add_log(
             job_id=job_id,
@@ -493,7 +631,8 @@ def translate_batch_with_repair(
             message=(
                 f"Repair request for subtitle index {item['index']} completed in {repair_duration}s. "
                 f"Tokens: {repair_result.total_tokens} total. "
-                f"{provider_cost_text(repair_result.input_tokens, repair_result.output_tokens)}."
+                f"{provider_cost_text(repair_result.input_tokens, repair_result.output_tokens)}. "
+                f"{alignment_debug_message(repair_report)}"
             ),
             model=settings.openai_model,
             input_tokens=repair_result.input_tokens,
@@ -505,7 +644,7 @@ def translate_batch_with_repair(
             subtitle_end=item["index"],
         )
 
-        if item["index"] in repair_result.translations:
+        if repair_report["passed"]:
             translated[item["index"]] = repair_result.translations[item["index"]]
             add_log(
                 job_id=job_id,
@@ -535,6 +674,31 @@ def translate_batch_with_repair(
 
     if still_missing:
         raise RuntimeError(f"Translation output missing indexes after repair: {still_missing}")
+
+    repair_report = {
+        **report,
+        "returned_indexes": [item["index"] for item in batch if item["index"] in translated],
+        "returned_count": len(translated),
+        "parsed_count": len(translated),
+        "expected_duplicate_indexes": [],
+        "missing_indexes": [],
+        "extra_indexes": [],
+        "duplicate_indexes": [],
+        "reordered": False,
+        "malformed_block_count": 0,
+    }
+
+    add_log(
+        job_id=job_id,
+        level="INFO",
+        event="batch_alignment_validated",
+        message=f"Batch {batch_number}/{batch_count} alignment validated after repair. {alignment_debug_message(repair_report)}",
+        model=settings.openai_model,
+        batch_number=batch_number,
+        batch_count=batch_count,
+        subtitle_start=start_index,
+        subtitle_end=end_index,
+    )
 
     return translated
 
@@ -577,6 +741,7 @@ def run_translation_job(
         path = Path(input_path)
         check_cancelled(job_id=job_id, batch_id=batch_id)
         subs = read_srt(path)
+        srt_index_to_list_pos = build_srt_index_to_list_pos(subs)
         detected_source_language = detect_subtitle_language(subs, input_filename)
 
         total = len([sub for sub in subs if sub.text.strip()])
@@ -644,13 +809,44 @@ def run_translation_job(
             check_cancelled(job_id=job_id, batch_id=batch_id)
 
             for item in batch:
-                subtitle_index = item["index"]
+                srt_index = item["index"]
+                list_pos = srt_index_to_list_pos.get(srt_index)
 
-                if subtitle_index in translated:
-                    subs[subtitle_index].text = wrap_subtitle_text(
-                        translated[subtitle_index],
-                        target_language,
+                if list_pos is None:
+                    add_log(
+                        job_id=job_id,
+                        level="ERROR",
+                        event="alignment_write_error",
+                        message=(
+                            f"Cannot write translated subtitle for SRT index {srt_index}; "
+                            "the source subtitle index was not found in the parsed SRT."
+                        ),
+                        model=settings.openai_model,
+                        batch_number=batch_number,
+                        batch_count=len(batches),
+                        subtitle_start=srt_index,
+                        subtitle_end=srt_index,
                     )
+                    raise BatchAlignmentError(f"Cannot write translated subtitle for SRT index {srt_index}.")
+
+                if srt_index not in translated:
+                    add_log(
+                        job_id=job_id,
+                        level="ERROR",
+                        event="alignment_write_error",
+                        message=f"Cannot write SRT index {srt_index}; translated text is missing.",
+                        model=settings.openai_model,
+                        batch_number=batch_number,
+                        batch_count=len(batches),
+                        subtitle_start=srt_index,
+                        subtitle_end=srt_index,
+                    )
+                    raise BatchAlignmentError(f"Cannot write SRT index {srt_index}; translated text is missing.")
+
+                subs[list_pos].text = wrap_subtitle_text(
+                    translated[srt_index],
+                    target_language,
+                )
 
             translated_count += len(batch)
             progress_percent = int((translated_count / total) * 100) if total else 100

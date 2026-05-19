@@ -11,8 +11,21 @@ def without_direction_marks(text: str) -> str:
     return text.replace("\u202b", "").replace("\u202c", "")
 
 
-def make_sub(text: str):
-    return pysrt.SubRipItem(index=1, text=text)
+def make_sub(text: str, index: int = 1):
+    return pysrt.SubRipItem(index=index, text=text)
+
+
+def test_batching_uses_real_srt_indexes_not_list_positions():
+    subs = [
+        make_sub("First", index=1),
+        make_sub("Second", index=2),
+        make_sub("Fifth", index=5),
+    ]
+
+    batches = list(batch_subtitles(subs, batch_size=10, max_chars=10_000))
+
+    assert [item["index"] for item in batches[0]] == [1, 2, 5]
+    assert 0 not in [item["index"] for item in batches[0]]
 
 
 def test_cjk_token_estimate_is_higher_than_latin_for_same_length():

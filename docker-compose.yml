@@ -8,7 +8,7 @@ services:
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: ${APP_PORT:-2288}
-      APP_VERSION: ${APP_VERSION:-1.6.1}
+      APP_VERSION: ${APP_VERSION:-1.7.1}
       DEMO_MODE: ${DEMO_MODE:-false}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}

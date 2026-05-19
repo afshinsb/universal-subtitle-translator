@@ -83,7 +83,7 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
 
 class Settings:
     app_name: str = env_value("APP_NAME", "Universal Subtitle Translator") or "Universal Subtitle Translator"
-    app_version: str = env_value("APP_VERSION", "1.6.1") or "1.6.1"
+    app_version: str = env_value("APP_VERSION", "1.7.1") or "1.7.1"
     demo_mode: bool = parse_bool_env("DEMO_MODE", False)
     app_host: str = env_value("APP_HOST", "0.0.0.0") or "0.0.0.0"
     app_port: int = parse_int_env("APP_PORT", 2288)
@@ -94,8 +94,8 @@ class Settings:
     project_github_handle: str = env_value("PROJECT_GITHUB_HANDLE", "afshinsb") or "afshinsb"
     project_github_url: str = env_value(
         "PROJECT_GITHUB_URL",
-        "https://github.com/afshinsb",
-    ) or "https://github.com/afshinsb"
+        "https://github.com/afshinsb/universal-subtitle-translator",
+    ) or "https://github.com/afshinsb/universal-subtitle-translator"
     project_issue_url: str = env_value(
         "PROJECT_ISSUE_URL",
         f"{project_github_url}/issues",
