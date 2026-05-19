@@ -244,3 +244,30 @@ def test_shifted_model_output_is_rejected_and_never_written(monkeypatch):
     assert updates[-1]["status"] == "failed"
     assert "Translation alignment failed" in updates[-1]["error"]
     assert any(log["event"] == "batch_alignment_mismatch" for log in logs)
+
+
+def test_single_file_job_uses_per_job_output_dir_for_uploaded_srt(tmp_path, monkeypatch):
+    captured = {}
+
+    monkeypatch.setattr(job_runner, "read_srt", lambda path: pysrt.SubRipFile([make_sub(1, "Hello")]))
+    monkeypatch.setattr(job_runner, "detect_subtitle_language", lambda subs, filename: "English")
+    monkeypatch.setattr(job_runner, "update_job", lambda *args, **kwargs: None)
+    monkeypatch.setattr(job_runner, "add_log", lambda **kwargs: None)
+
+    def fake_run_translation_job(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(job_runner, "run_translation_job", fake_run_translation_job)
+
+    output_dir = tmp_path / "outputs" / "job-1"
+
+    job_runner.run_single_file_job(
+        job_id="job-1",
+        input_path=str(tmp_path / "uploads" / "job-1" / "movie.en.srt"),
+        input_filename="movie.en.srt",
+        target_language="French",
+        style="natural_conversational",
+        output_dir=str(output_dir),
+    )
+
+    assert captured["output_path_override"] == str(output_dir / "movie.fr.srt")

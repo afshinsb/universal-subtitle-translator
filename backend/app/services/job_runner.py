@@ -1136,10 +1136,12 @@ def run_single_file_job(
     target_language: str,
     style: str,
     overwrite_existing: bool = False,
+    output_dir: str | None = None,
 ) -> None:
     register_active_job(job_id)
     path = Path(input_path)
     suffix = path.suffix.lower()
+    job_output_dir = Path(output_dir) if output_dir else None
 
     try:
         check_cancelled(job_id=job_id)
@@ -1188,7 +1190,7 @@ def run_single_file_job(
                 return
 
             output_filename = make_output_filename(input_filename, target_language)
-            output_path = path.with_name(output_filename)
+            output_path = (job_output_dir / output_filename) if job_output_dir else path.with_name(output_filename)
 
             if output_path.exists() and not overwrite_existing:
                 add_log(
@@ -1261,6 +1263,12 @@ def run_single_file_job(
                 return
 
             file_info = scan_result["item"]
+
+            if job_output_dir:
+                file_info["output_path"] = str(job_output_dir / file_info["output_name"])
+                file_info["output_location"] = "output_dir"
+                file_info["output_note"] = "Browser upload output is saved in this job's app output folder."
+
             source_detail = (
                 f"{file_info['source_kind']} subtitle selected: "
                 f"{file_info['source_subtitle_name']} "

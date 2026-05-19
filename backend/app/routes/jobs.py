@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 import threading
+import asyncio
 
 from fastapi import APIRouter, Request, UploadFile, File, Form
 from fastapi import HTTPException
@@ -17,6 +18,7 @@ from app.routes.utils import validate_language, validate_style
 
 router = APIRouter()
 templates = configure_templates(Jinja2Templates(directory="app/templates"))
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def public_job(job: dict) -> dict:
@@ -115,6 +117,7 @@ async def create_translation_job(
         )
 
     input_dir = settings.upload_dir / job_id
+    output_dir = settings.output_dir / job_id
     input_dir.mkdir(parents=True, exist_ok=True)
     input_path = input_dir / safe_filename
     max_bytes = settings.max_upload_mb * 1024 * 1024
@@ -122,8 +125,8 @@ async def create_translation_job(
     written = 0
 
     try:
-        with open(input_path, "wb") as f:
-            while chunk := file.file.read(1024 * 1024):
+        with input_path.open("wb") as output_file:
+            while chunk := await file.read(UPLOAD_CHUNK_SIZE):
                 written += len(chunk)
 
                 if written > max_bytes:
@@ -135,10 +138,12 @@ async def create_translation_job(
                         ),
                     )
 
-                f.write(chunk)
+                await asyncio.to_thread(output_file.write, chunk)
     except Exception:
         input_path.unlink(missing_ok=True)
         raise
+    finally:
+        await file.close()
 
     create_job(
         job_id=job_id,
@@ -159,6 +164,7 @@ async def create_translation_job(
             "target_language": target_language,
             "style": style,
             "overwrite_existing": overwrite_existing,
+            "output_dir": str(output_dir),
         },
         daemon=True,
     )

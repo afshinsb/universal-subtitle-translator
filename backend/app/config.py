@@ -83,8 +83,9 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
 
 class Settings:
     app_name: str = env_value("APP_NAME", "Universal Subtitle Translator") or "Universal Subtitle Translator"
-    app_version: str = env_value("APP_VERSION", "1.8.0") or "1.8.0"
+    app_version: str = env_value("APP_VERSION", "1.8.1") or "1.8.1"
     demo_mode: bool = parse_bool_env("DEMO_MODE", False)
+    dev_mode: bool = parse_bool_env("DEV_MODE", True)
     app_host: str = env_value("APP_HOST", "0.0.0.0") or "0.0.0.0"
     app_port: int = parse_int_env("APP_PORT", 2288)
 
@@ -225,16 +226,22 @@ def openai_api_key_state() -> tuple[bool, str, str, str]:
 
 
 def auth_config_checks() -> list[dict]:
+    insecure_auth_defaults_blocking = not settings.demo_mode and not settings.dev_mode
+
     if not settings.auth_enabled:
         return [
             {
                 "id": "auth_enabled",
                 "label": "Authentication",
-                "ok": True,
-                "severity": "ok",
-                "blocking": False,
+                "ok": not insecure_auth_defaults_blocking,
+                "severity": "error" if insecure_auth_defaults_blocking else "ok",
+                "blocking": insecure_auth_defaults_blocking,
                 "message": "Authentication is disabled.",
-                "fix": "Remove AUTH_ENABLED=false or set AUTH_ENABLED=true in .env to require login.",
+                "fix": (
+                    "Set AUTH_ENABLED=true, or explicitly set DEMO_MODE=true/DEV_MODE=true for non-production use."
+                    if insecure_auth_defaults_blocking
+                    else "Remove AUTH_ENABLED=false or set AUTH_ENABLED=true in .env to require login."
+                ),
                 "value": "disabled",
             }
         ]
@@ -268,20 +275,27 @@ def auth_config_checks() -> list[dict]:
 
     password_is_default = settings.admin_password == "admin"
     password_ok = bool(settings.admin_password) and not is_placeholder(settings.admin_password)
+    password_blocks = not password_ok or (password_is_default and insecure_auth_defaults_blocking)
     checks.append(
         {
             "id": "admin_password",
             "label": "Admin password",
-            "ok": password_ok and not password_is_default,
-            "severity": "warning" if password_ok and password_is_default else ("ok" if password_ok else "error"),
-            "blocking": not password_ok,
+            "ok": password_ok and not password_blocks,
+            "severity": (
+                "error"
+                if password_blocks
+                else ("warning" if password_ok and password_is_default else "ok")
+            ),
+            "blocking": password_blocks,
             "message": (
                 "ADMIN_PASSWORD is still set to the default password."
                 if password_ok and password_is_default
                 else ("ADMIN_PASSWORD is configured." if password_ok else "ADMIN_PASSWORD is missing or still looks like a placeholder.")
             ),
             "fix": (
-                "Change ADMIN_PASSWORD in .env before exposing this app beyond your machine."
+                "Change ADMIN_PASSWORD in .env before running with DEV_MODE=false."
+                if password_is_default and insecure_auth_defaults_blocking
+                else "Change ADMIN_PASSWORD in .env before exposing this app beyond your machine."
                 if password_ok and password_is_default
                 else ("No action needed." if password_ok else "Set ADMIN_PASSWORD in .env, then restart the app.")
             ),
@@ -291,20 +305,27 @@ def auth_config_checks() -> list[dict]:
 
     secret_is_default = settings.session_secret == DEFAULT_SESSION_SECRET
     secret_ok = bool(settings.session_secret) and not is_placeholder(settings.session_secret) and len(settings.session_secret or "") >= 32
+    secret_blocks = not secret_ok or (secret_is_default and insecure_auth_defaults_blocking)
     checks.append(
         {
             "id": "session_secret",
             "label": "Session secret",
-            "ok": secret_ok and not secret_is_default,
-            "severity": "warning" if secret_ok and secret_is_default else ("ok" if secret_ok else "error"),
-            "blocking": not secret_ok,
+            "ok": secret_ok and not secret_blocks,
+            "severity": (
+                "error"
+                if secret_blocks
+                else ("warning" if secret_ok and secret_is_default else "ok")
+            ),
+            "blocking": secret_blocks,
             "message": (
                 "SESSION_SECRET is still using the default development value."
                 if secret_ok and secret_is_default
                 else ("SESSION_SECRET is configured." if secret_ok else "SESSION_SECRET is missing, too short, or still looks like a placeholder.")
             ),
             "fix": (
-                "Set SESSION_SECRET to a random 32+ character value before exposing this app beyond your machine."
+                "Set SESSION_SECRET to a random 32+ character value before running with DEV_MODE=false."
+                if secret_is_default and insecure_auth_defaults_blocking
+                else "Set SESSION_SECRET to a random 32+ character value before exposing this app beyond your machine."
                 if secret_ok and secret_is_default
                 else ("No action needed." if secret_ok else "Set SESSION_SECRET to a random 32+ character value in .env, then restart the app.")
             ),

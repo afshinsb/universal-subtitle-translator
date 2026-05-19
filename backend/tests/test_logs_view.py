@@ -1,4 +1,6 @@
-from app.routes.logs import log_summary, logs_view_context, present_log
+from app.config import ensure_directories, settings
+from app.database import add_log, create_batch, create_job, init_db
+from app.routes.logs import batch_logs, log_summary, logs_view_context, present_log
 
 
 def test_present_log_categorizes_provider_token_usage_as_quiet():
@@ -87,3 +89,42 @@ def test_present_log_hides_routine_provider_usage_by_default():
 
     assert presented["category"] == "API/Provider"
     assert presented["quiet"] is True
+
+
+def test_batch_logs_queries_batch_and_job_logs_without_global_limit(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+
+    monkeypatch.setattr(settings, "data_dir", data_dir)
+    monkeypatch.setattr(settings, "upload_dir", data_dir / "uploads")
+    monkeypatch.setattr(settings, "output_dir", data_dir / "outputs")
+    monkeypatch.setattr(settings, "temp_dir", data_dir / "temp")
+    monkeypatch.setattr(settings, "database_path", data_dir / "app.db")
+
+    ensure_directories()
+    init_db()
+
+    create_batch(
+        batch_id="batch-1",
+        folder_path=str(tmp_path / "media"),
+        target_language="Persian",
+        style="natural_conversational",
+    )
+    create_job(
+        job_id="job-1",
+        batch_id="batch-1",
+        input_file="movie.en.srt",
+        input_path=str(tmp_path / "movie.en.srt"),
+        target_language="Persian",
+        source_language="English",
+        style="natural_conversational",
+        model="test-model",
+    )
+    add_log(level="INFO", event="batch_old", message="old batch log", batch_id="batch-1")
+    add_log(level="INFO", event="job_old", message="old job log", job_id="job-1")
+
+    for index in range(1005):
+        add_log(level="INFO", event="noise", message=f"noise {index}")
+
+    events = {log["event"] for log in batch_logs("batch-1")}
+
+    assert {"batch_old", "job_old"} <= events

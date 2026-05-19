@@ -8,7 +8,7 @@ from fastapi.responses import Response
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
-from app.database import list_jobs_by_batch, list_logs, list_logs_for_job
+from app.database import list_jobs_by_batch, list_logs, list_logs_for_batch, list_logs_for_job
 from app.template_context import configure_templates
 
 router = APIRouter()
@@ -313,10 +313,7 @@ def logs_csv_response(logs: list[dict], filename: str) -> Response:
 
 def batch_logs(batch_id: str) -> list[dict]:
     job_ids = {job["id"] for job in list_jobs_by_batch(batch_id)}
-    return [
-        log for log in list_logs(limit=1000)
-        if log.get("batch_id") == batch_id or log.get("job_id") in job_ids
-    ]
+    return list_logs_for_batch(batch_id, job_ids)
 
 
 @router.get("/logs")

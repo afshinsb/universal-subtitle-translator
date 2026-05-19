@@ -359,6 +359,33 @@ def list_jobs_by_batch(batch_id: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def list_logs_for_batch(batch_id: str, job_ids: list[str] | set[str] | tuple[str, ...]) -> list[dict[str, Any]]:
+    job_ids = list(job_ids)
+
+    with get_connection() as conn:
+        if job_ids:
+            placeholders = ", ".join("?" for _ in job_ids)
+            rows = conn.execute(
+                f"""
+                SELECT * FROM logs
+                WHERE batch_id = ? OR job_id IN ({placeholders})
+                ORDER BY id DESC
+                """,
+                [batch_id, *job_ids],
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM logs
+                WHERE batch_id = ?
+                ORDER BY id DESC
+                """,
+                (batch_id,),
+            ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
 ACTIVE_STATUSES = ("queued", "running", "cancel_requested")
 STALE_WORK_STATUSES = (
     "queued",

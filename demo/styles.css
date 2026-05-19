@@ -1385,7 +1385,6 @@ code {
     background: color-mix(in srgb, var(--surface-2) 70%, transparent);
 }
 
-:root[data-ui-mode="minimal"] .nav a[href="#about"],
 :root[data-ui-mode="minimal"] .nav a[href="#settings"],
 :root[data-ui-mode="minimal"] .nav a[href="#logs"],
 :root[data-ui-mode="minimal"] .account-button {
@@ -1396,7 +1395,6 @@ code {
     opacity: 0.68;
 }
 
-:root[data-ui-mode="minimal"] .nav a[href="#about"]::after,
 :root[data-ui-mode="minimal"] .nav a[href="#settings"]::after,
 :root[data-ui-mode="minimal"] .nav a[href="#logs"]::after,
 :root[data-ui-mode="minimal"] .account-button::before {
@@ -1405,10 +1403,6 @@ code {
     display: grid;
     place-items: center;
     color: var(--muted);
-}
-
-:root[data-ui-mode="minimal"] .nav a[href="#about"]::after {
-    content: "?";
 }
 
 :root[data-ui-mode="minimal"] .nav a[href="#settings"]::after {
@@ -1427,7 +1421,6 @@ code {
     content: none;
 }
 
-:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#about"],
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#settings"],
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#logs"],
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button {
@@ -1436,7 +1429,6 @@ code {
     opacity: 1;
 }
 
-:root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#about"]::after,
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#settings"]::after,
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .nav a[href="#logs"]::after,
 :root[data-ui-mode="minimal"] .topbar.nav-collapsed .account-button::before {

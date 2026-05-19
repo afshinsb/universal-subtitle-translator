@@ -40,21 +40,26 @@ def list_uploads():
 
     files = []
 
-    for path in settings.upload_dir.glob("*"):
+    for path in settings.upload_dir.rglob("*"):
         if path.is_file():
             try:
                 size = path.stat().st_size
             except OSError:
                 continue
 
+            relative_path = path.relative_to(settings.upload_dir)
+            job_id = relative_path.parts[0] if len(relative_path.parts) > 1 else None
+
             files.append(
                 {
                     "name": path.name,
+                    "relative_path": str(relative_path),
+                    "job_id": job_id,
                     "size": size,
                 }
             )
 
-    return {"uploads": files}
+    return {"uploads": sorted(files, key=lambda item: item["relative_path"])}
 
 
 @router.get("/outputs")
