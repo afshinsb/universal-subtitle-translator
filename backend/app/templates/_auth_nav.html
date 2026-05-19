@@ -1,25 +1,45 @@
-{% if auth_enabled %}
-    {% set signed_in_user = current_username(request) %}
-    {% if signed_in_user %}
-        <div class="account-menu">
-            <button
-                type="button"
-                class="account-button"
-                data-account-toggle
-                aria-expanded="false"
-                aria-label="Open account menu"
-            >
-                Account
-            </button>
-            <div class="account-popover" data-account-popover hidden>
+{% set signed_in_user = current_username(request) %}
+{% if signed_in_user or not auth_enabled %}
+    <div class="account-menu">
+        <button
+            type="button"
+            class="account-button"
+            data-account-toggle
+            aria-expanded="false"
+            aria-label="Open account menu"
+        >
+            Account
+        </button>
+        <div class="account-popover" data-account-popover hidden>
+            {% if signed_in_user %}
                 <div class="account-summary">
-                    <span>Signed in</span>
-                    <strong>{{ signed_in_user }}</strong>
+                    <span class="account-avatar" aria-hidden="true">{{ signed_in_user[:1] | upper }}</span>
+                    <div>
+                        <span>Signed in</span>
+                        <strong>{{ signed_in_user }}</strong>
+                    </div>
                 </div>
+            {% endif %}
+            <div class="account-menu-section">
+                <span class="account-menu-label">Manage</span>
+                <div class="account-menu-list">
+                    <a class="{{ 'active' if request.url.path == '/settings' else '' }}" href="/settings">
+                        <span>Settings</span>
+                    </a>
+                    <a class="{{ 'active' if request.url.path == '/logs' else '' }}" href="/logs">
+                        <span>Logs</span>
+                    </a>
+                </div>
+            </div>
+            <div class="account-menu-section">
+                <span class="account-menu-label">Display</span>
+                {% include "_mode_controls.html" %}
+            </div>
+            {% if signed_in_user %}
                 <form method="post" action="/logout" class="nav-logout-form">
                     <button type="submit" class="secondary nav-logout-button">Logout</button>
                 </form>
-            </div>
+            {% endif %}
         </div>
-    {% endif %}
+    </div>
 {% endif %}
