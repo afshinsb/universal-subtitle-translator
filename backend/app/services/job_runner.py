@@ -1613,8 +1613,13 @@ def run_folder_batch_job(
                 completed = len([j for j in refreshed_jobs if j["status"] == "done"])
                 failed = len([j for j in refreshed_jobs if j["status"] == "failed"])
                 skipped = len([j for j in refreshed_jobs if j["status"] in {"skipped", "cancelled"}])
+                progress_jobs = [j for j in refreshed_jobs if j["status"] != "skipped"]
+                progress_percent = (
+                    int(sum(j["progress_percent"] or 0 for j in progress_jobs) / len(progress_jobs))
+                    if progress_jobs
+                    else 100
+                )
                 finished = completed + failed + skipped
-                progress_percent = int((finished / total_files) * 100) if total_files else 100
 
                 update_batch(
                     batch_id,

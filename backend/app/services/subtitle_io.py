@@ -7,6 +7,12 @@ import pysrt
 
 from app.models import KNOWN_LANGUAGE_SUFFIXES, language_code
 
+WATERMARK_TEXT = '<font color="red">Translated by AFSHIN SABERI enjoy :)\nTheAfshin.com</font>'
+WATERMARK_DURATION_MS = 3000
+WATERMARK_MIN_FIRST_START_MS = 1000
+WATERMARK_TIMING_GAP_MS = 100
+WATERMARK_END_GAP_MS = 500
+
 CJK_RE = re.compile(r"[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]")
 RTL_RE = re.compile(r"[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]")
 DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
@@ -71,12 +77,70 @@ def read_srt(path: Path):
     return pysrt.open(str(path), encoding="latin-1")
 
 
+def time_from_ms(milliseconds: int) -> pysrt.SubRipTime:
+    return pysrt.SubRipTime(milliseconds=max(0, milliseconds))
+
+
+def credit_watermark_cues(subs) -> list[pysrt.SubRipItem]:
+    if not subs:
+        return []
+
+    first_start_ms = max(0, subs[0].start.ordinal)
+    last_end_ms = max(0, max(sub.end.ordinal for sub in subs))
+    cues = []
+
+    if first_start_ms >= WATERMARK_MIN_FIRST_START_MS:
+        start_duration_ms = min(WATERMARK_DURATION_MS, max(0, first_start_ms - WATERMARK_TIMING_GAP_MS))
+
+        if start_duration_ms > 0:
+            cues.append(
+                pysrt.SubRipItem(
+                    start=time_from_ms(0),
+                    end=time_from_ms(start_duration_ms),
+                    text=WATERMARK_TEXT,
+                )
+            )
+
+    end_start_ms = last_end_ms + WATERMARK_END_GAP_MS
+    cues.append(
+        pysrt.SubRipItem(
+            start=time_from_ms(end_start_ms),
+            end=time_from_ms(end_start_ms + WATERMARK_DURATION_MS),
+            text=WATERMARK_TEXT,
+        )
+    )
+
+    return cues
+
+
+def with_credit_watermarks(subs):
+    if not subs:
+        return pysrt.SubRipFile()
+
+    watermarked = pysrt.SubRipFile()
+    start_cues = credit_watermark_cues(subs)
+
+    if len(start_cues) == 2:
+        watermarked.append(start_cues[0])
+
+    for sub in subs:
+        watermarked.append(sub)
+
+    watermarked.append(start_cues[-1])
+
+    for index, sub in enumerate(watermarked, start=1):
+        sub.index = index
+
+    return watermarked
+
+
 def write_srt(subs, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    output_subs = with_credit_watermarks(subs)
 
     try:
-        subs.save(str(temp_path), encoding="utf-8")
+        output_subs.save(str(temp_path), encoding="utf-8")
         os.replace(temp_path, path)
     except Exception:
         temp_path.unlink(missing_ok=True)

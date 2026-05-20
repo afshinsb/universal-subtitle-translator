@@ -3,6 +3,8 @@ import pysrt
 from app.services.subtitle_io import (
     batch_subtitles,
     estimate_subtitle_tokens,
+    with_credit_watermarks,
+    write_srt,
     wrap_subtitle_text,
 )
 
@@ -11,8 +13,13 @@ def without_direction_marks(text: str) -> str:
     return text.replace("\u202b", "").replace("\u202c", "")
 
 
-def make_sub(text: str, index: int = 1):
-    return pysrt.SubRipItem(index=index, text=text)
+def make_sub(text: str, index: int = 1, start_ms: int = 0, end_ms: int = 1000):
+    return pysrt.SubRipItem(
+        index=index,
+        start=pysrt.SubRipTime(milliseconds=start_ms),
+        end=pysrt.SubRipTime(milliseconds=end_ms),
+        text=text,
+    )
 
 
 def test_batching_uses_real_srt_indexes_not_list_positions():
@@ -96,3 +103,60 @@ def test_wrap_long_unspaced_text_has_no_extreme_line():
     wrapped = wrap_subtitle_text(text, "English")
 
     assert all(len(line) <= 42 for line in wrapped.splitlines())
+
+
+def test_credit_watermark_skips_start_when_first_subtitle_starts_too_soon():
+    subs = pysrt.SubRipFile([make_sub("Original", start_ms=800, end_ms=1800)])
+
+    watermarked = with_credit_watermarks(subs)
+
+    assert len(watermarked) == 2
+    assert watermarked[0].text == "Original"
+    assert "AFSHIN SABERI" in watermarked[1].text
+    assert watermarked[1].start.ordinal == 2300
+    assert [sub.index for sub in watermarked] == [1, 2]
+
+
+def test_credit_watermark_shortens_start_before_early_first_subtitle():
+    subs = pysrt.SubRipFile([make_sub("Original", start_ms=2000, end_ms=3000)])
+
+    watermarked = with_credit_watermarks(subs)
+
+    assert len(watermarked) == 3
+    assert "AFSHIN SABERI" in watermarked[0].text
+    assert watermarked[0].start.ordinal == 0
+    assert watermarked[0].end.ordinal == 1900
+    assert watermarked[1].text == "Original"
+    assert watermarked[1].start.ordinal == 2000
+    assert watermarked[1].end.ordinal == 3000
+    assert watermarked[2].start.ordinal == 3500
+    assert watermarked[2].end.ordinal == 6500
+    assert [sub.index for sub in watermarked] == [1, 2, 3]
+
+
+def test_write_srt_adds_red_credit_watermarks_without_shifting_original_timing(tmp_path):
+    path = tmp_path / "movie.fa.srt"
+    subs = pysrt.SubRipFile(
+        [
+            make_sub("First translated line", index=7, start_ms=5000, end_ms=6500),
+            make_sub("Last translated line", index=8, start_ms=7000, end_ms=8000),
+        ]
+    )
+
+    write_srt(subs, path)
+    saved = pysrt.open(str(path), encoding="utf-8")
+
+    assert len(saved) == 4
+    assert saved[0].text == '<font color="red">Translated by AFSHIN SABERI enjoy :)\nTheAfshin.com</font>'
+    assert saved[0].start.ordinal == 0
+    assert saved[0].end.ordinal == 3000
+    assert saved[1].text == "First translated line"
+    assert saved[1].start.ordinal == 5000
+    assert saved[1].end.ordinal == 6500
+    assert saved[2].text == "Last translated line"
+    assert saved[2].start.ordinal == 7000
+    assert saved[2].end.ordinal == 8000
+    assert saved[3].text == '<font color="red">Translated by AFSHIN SABERI enjoy :)\nTheAfshin.com</font>'
+    assert saved[3].start.ordinal == 8500
+    assert saved[3].end.ordinal == 11500
+    assert [sub.index for sub in saved] == [1, 2, 3, 4]

@@ -37,6 +37,7 @@ SCAN_CANCELLED: set[str] = set()
 SCAN_LOCK = threading.Lock()
 INTERNAL_SOURCE_PREFERENCE = DEFAULT_SOURCE_PREFERENCE
 SCAN_SESSION_TTL_SECONDS = 60 * 60
+PROGRESS_EXCLUDED_STATUSES = {"skipped"}
 
 
 def prune_scan_sessions_locked() -> None:
@@ -156,9 +157,11 @@ def build_batch_status(batch_id: str) -> dict:
     skipped_files = len([job for job in jobs if job.get("status") in {"skipped", "cancelled", "cancel_requested", "interrupted"}])
     active_jobs = [job for job in jobs if job.get("status") == "running"][:batch_file_concurrency_limit()]
 
-    if jobs:
+    progress_jobs = [job for job in jobs if job.get("status") not in PROGRESS_EXCLUDED_STATUSES]
+
+    if progress_jobs:
         progress_percent = int(
-            sum(job.get("progress_percent") or 0 for job in jobs) / len(jobs)
+            sum(job.get("progress_percent") or 0 for job in progress_jobs) / len(progress_jobs)
         )
     else:
         progress_percent = batch.get("progress_percent") or 0
