@@ -58,7 +58,7 @@ def run_smoke(root: Path) -> dict:
     data = root / "data"
     with patch.multiple(settings, data_dir=data, upload_dir=data / "uploads", output_dir=data / "outputs",
                         temp_dir=data / "temp", database_path=data / "app.db", media_root=media,
-                        openai_model="fixture-model"), patch.object(translator, "get_openai_client", client):
+                        openai_model="fixture-model", dev_mode=True, openai_daily_budget_usd=0), patch.object(translator, "get_openai_client", client):
         ensure_directories()
         init_db()
         create_batch("smoke", str(media), "French", "natural_conversational")
