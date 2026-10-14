@@ -52,8 +52,7 @@ Exact source IDs and timestamps are preserved for automation output.
 Automation adds no extra watermark cues. Manual outputs retain their existing
 watermark behavior, styles and routes.
 
-Development paths are additionally constrained to /media/fixtures regardless
-of UI configuration; /media/movies and /media/shows cannot be automation roots.
+Development is fixture-only by default. The user subsequently authorized\nreal-library access: AUTOMATION_ALLOW_LIBRARY_WRITES=true in dev/compose.yml\nallows configured /media/movies and /media/shows roots. Automation stays paused.
 When no key is configured, normal processing stops at waiting_config before
 any provider request. The development key is now configured, but automation
 remains paused. A mocked provider exists only within verification processes.
@@ -99,7 +98,8 @@ python3 /approved/scripts/automation_event.py --service bazarr --video "{episode
 Provide UST_AUTOMATION_URL and UST_AUTOMATION_TOKEN_FILE securely.
 Bazarr's {episode} variable is the full episode/movie path.
 Path mappings translate complete source directory prefixes to backend roots.
-Current development mappings remain empty; simulated events used fixture paths.
+Simulated events used fixture paths. Current mappings include /movies to
+/media/movies, /tv and /shows to /media/shows, and equivalent host media paths.
 
 Primary payload/variable references:
 - Sonarr source: https://github.com/Sonarr/Sonarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookImportPayload.cs
@@ -160,7 +160,7 @@ automation-prepare.json and automation-complete.json.
    loopback-only; service containers have not been attached to its network.
 2. Approve and configure a provider/model and a small paid quality evaluation.
    Mock tests validate mechanics, not actual translation quality.
-3. Review library write permissions, output policy, existing Persian subtitles
+3. Library write access is now authorized and verified. Review output policy, existing Persian subtitles
    and production backup/data migration for the non-root application.
 4. Enable one approved hook/library at a time, verify behavior, then expand.
    No Sonarr/Radarr/Bazarr hook or production deployment has been enabled.
@@ -182,3 +182,5 @@ Provider configuration update: dev/compose.yml now honors the key and upload
 limits in dev/.env. Model, style and SRT batch settings also come from that
 file. Automation remains paused. Startup checks model access; agent-run tests
 clear the provider key and use mocks, with no paid inference requests.
+
+Media access update: Movies and Shows now have authorized read/write bind\nmounts. All 162 library directories were writable by afshin, and all files\nwere readable. No host ownership/permission changes were required.\nHooks remain disabled; no paid translation is authorized by this access change.\n

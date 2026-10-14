@@ -78,8 +78,8 @@ renders the updated config. Ordinary source changes need no rebuild.
 | --- | --- | --- |
 | dev/runtime/data | /app/data | UID/GID 1000:1000, writable |
 | dev/runtime/fixtures | /media/fixtures | UID/GID 1000:1000, writable |
-| /tank/share/media/movies | /media/movies | read-only |
-| /tank/share/media/shows | /media/shows | read-only |
+| /tank/share/media/movies | /media/movies | read/write (authorized) |
+| /tank/share/media/shows | /media/shows | read/write (authorized) |
 
 SQLite: dev/runtime/data/app.db. Uploads, outputs and temporary files have
 separate subdirectories there. MEDIA_ROOT=/media restricts batch paths.
@@ -188,3 +188,5 @@ Provider configuration update: dev/compose.yml now honors the key and upload
 limits in dev/.env. Model, style and SRT batch settings also come from that
 file. Automation remains paused. Startup checks model access; agent-run tests
 clear the provider key and use mocks, with no paid inference requests.
+
+Media access update: the user authorized Movies/Shows read/write mounts.\nExisting afshin (1000:1000) permissions were sufficient; no host chmod/chown\nwas needed. Automation roots include fixtures, movies and shows; source\nservice path mappings are configured, but automatic processing remains paused.\nAgent-run translation tests continue to use fixtures and mocked providers.\n

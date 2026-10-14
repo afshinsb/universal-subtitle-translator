@@ -45,7 +45,7 @@ for library in [Path("/media/movies"), Path("/media/shows")]:
             result["extracted_cues"] = len(read_srt(output))
         if sidecars:
             result["sidecar_cues"] = len(read_srt(sidecars[0]))
-    assert not __import__("os").access(library, __import__("os").W_OK)
+    result["directory_writable"] = __import__("os").access(library, __import__("os").W_OK)
     print("real_media:", json.dumps(result))
 marker = "prime-dev-persistence-validation"
 if not get_batch(marker):

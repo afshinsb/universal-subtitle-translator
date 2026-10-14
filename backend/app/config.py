@@ -122,6 +122,8 @@ class Settings:
         else None
     )
 
+    automation_allow_library_writes: bool = parse_bool_env("AUTOMATION_ALLOW_LIBRARY_WRITES", False)
+
     default_source_language: str = env_value("DEFAULT_SOURCE_LANGUAGE", "Auto") or "Auto"
     default_target_language: str = env_value("DEFAULT_TARGET_LANGUAGE", "Persian") or "Persian"
     default_style: str = env_value("DEFAULT_STYLE", "natural_conversational") or "natural_conversational"

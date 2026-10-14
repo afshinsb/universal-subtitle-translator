@@ -10,12 +10,12 @@ Never start release Compose files: their names collide with production.
 
 Preserve production translator 1.4.0, port 2288, Portainer stack 14.
 Do not update/restart/replace/migrate production, touch its data/secrets,
-modify subs-translator or media-service hooks, change library permissions,
+modify subs-translator or media-service hooks, change library ownership,
 change firewall/network settings, or prune Docker. Keep builds sequential.
 
 Development names: ust-dev-backend and ust-dev-frontend.
 Only published development port: 127.0.0.1:2289.
-Backend uses UID/GID 1000:1000. Real libraries are read-only.
+Backend uses UID/GID 1000:1000. The user authorized read/write Movies and\nShows mounts. Existing host permissions are sufficient; do not broaden them.\nAUTOMATION_ALLOW_LIBRARY_WRITES=true permits configured library roots,\nbut agent-run translation tests must still use fixtures and mocked providers.
 Use generated writable fixtures and mocked providers for agent-run tests.
 A development API key may be configured. Never display it or make paid AI
 requests without approval. Keep automation paused unless explicitly authorized.

@@ -306,3 +306,13 @@ def test_embedded_metadata_identifies_hearing_impaired_and_commentary(monkeypatc
     streams = ffmpeg_service.list_text_subtitle_streams(tmp_path / "film.mkv")
     assert streams[0]["hearing_impaired"]
     assert streams[1]["comment"]
+
+
+def test_explicit_library_write_opt_in(library, monkeypatch):
+    monkeypatch.setattr(settings, "media_root", library.parent)
+    monkeypatch.setattr(settings, "automation_allow_library_writes", True)
+    real = library.parent / "movies"
+    real.mkdir()
+    cfg = automation.save_config(False, [str(real)], {"/movies":str(real)})
+    assert not cfg["enabled"]
+    assert automation.map_path("/movies/Film.mkv") == real / "Film.mkv"

@@ -58,8 +58,8 @@ def checked_path(value, cfg=None):
         media = settings.media_root.resolve()
         if path != media and media not in path.parents:
             raise ValueError("Path is outside MEDIA_ROOT.")
-    # Development can never translate real-library media, even after a UI change.
-    if settings.dev_mode and settings.media_root:
+    # Real-library automation requires a separately authorized deployment opt-in.
+    if settings.dev_mode and settings.media_root and not settings.automation_allow_library_writes:
         fixtures = (settings.media_root / "fixtures").resolve()
         if path != fixtures and fixtures not in path.parents:
             raise ValueError("Development automation is restricted to writable fixtures.")

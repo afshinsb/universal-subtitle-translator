@@ -26,13 +26,15 @@ services:
       TEMP_DIR: /app/data/temp
       DATABASE_PATH: /app/data/app.db
       MEDIA_ROOT: /media
+      # Explicitly authorized real-library access; processing remains paused.
+      AUTOMATION_ALLOW_LIBRARY_WRITES: "true"
     volumes:
       - ../backend/app:/app/app:ro
       - ../scripts:/smoke:ro
       - ./runtime/data:/app/data
       - ./runtime/fixtures:/media/fixtures
-      - /tank/share/media/movies:/media/movies:ro
-      - /tank/share/media/shows:/media/shows:ro
+      - /tank/share/media/movies:/media/movies:rw
+      - /tank/share/media/shows:/media/shows:rw
     user: "1000:1000"
     init: true
     cap_drop: [ALL]
