@@ -24,3 +24,21 @@ def test_live_benchmark_blocks_unapproved_or_insufficient_budget(tmp_path,approv
     with pytest.raises(ValueError):
         run(tmp_path,["gpt-5.6-terra"],"live",approval,budget)
     assert not list(tmp_path.iterdir())
+
+
+def test_luna_is_blinded_and_uses_current_context_contract(tmp_path):
+    result = run(tmp_path, ["gpt-6-luna"], "mock")
+    assert result["aligned"] == 24
+    assert result["request_parameters"]["gpt-6-luna"]["reasoning_effort"] == "none"
+    assert len(list((tmp_path/"reviewer").glob("*.fa.srt"))) == 24
+    assert not (tmp_path/"reviewer/review-key.json").exists()
+    assert "gpt-6-luna" not in (tmp_path/"reviewer/blind-review.csv").read_text()
+
+
+def test_context_ablation_adds_information_not_already_in_target_batch():
+    scene = scenes()[0]
+    without = payload(scene, False)
+    with_context = payload(scene, True)
+    assert "You look nervous." not in without
+    assert "You look nervous." in with_context
+    assert "BEGIN[12]" in without and "BEGIN[7]" not in without

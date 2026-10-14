@@ -1,9 +1,11 @@
 import re
 import json
+import os
 from dataclasses import dataclass
 
 from openai import OpenAI
 
+from app.services.pilot_budget import SYSTEM_PROMPT, reserve_request
 from app.config import settings
 from app.models import LANGUAGE_CODES, has_persian_characters, is_persian_language, normalize_language
 
@@ -315,19 +317,18 @@ def parse_translated_block_text(text: str) -> dict[int, str]:
 
 def call_openai(prompt: str) -> TranslationResult:
     with get_openai_client() as client:
-        response = client.chat.completions.create(
+        if os.getenv("UST_PILOT_BUDGET_FILE"):
+            if str(client.base_url).rstrip("/") != "https://api.openai.com/v1":
+                raise RuntimeError("Pilot prices apply only to the official OpenAI endpoint.")
+        guarded = reserve_request(settings.openai_model, prompt)
+        request_client = client.with_options(max_retries=0) if guarded else client
+        response = request_client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {
-                    "role": "system",
-                    "content": "You translate subtitles. You must obey the requested target language and block format exactly.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.1,
+            **(guarded if guarded else {"temperature": 0.1}),
         )
 
     if not response.choices:
