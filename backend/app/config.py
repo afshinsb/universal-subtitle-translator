@@ -105,6 +105,9 @@ class Settings:
 
     openai_api_key: str | None = env_value("OPENAI_API_KEY")
     openai_model: str = env_value("OPENAI_MODEL", "gpt-4o-mini") or ""
+    openai_daily_budget_usd: float = parse_float_env("OPENAI_DAILY_BUDGET_USD", 0)
+    openai_budget_input_ceiling_per_1m: float = parse_float_env("OPENAI_BUDGET_INPUT_CEILING_PER_1M", 0)
+    openai_budget_output_per_1m: float = parse_float_env("OPENAI_BUDGET_OUTPUT_PER_1M", 0)
     openai_reasoning_effort: str | None = env_value("OPENAI_REASONING_EFFORT") or None
     openai_max_completion_tokens: int = parse_int_env("OPENAI_MAX_COMPLETION_TOKENS", 0)
     auth_enabled: bool = parse_bool_env("AUTH_ENABLED", True)

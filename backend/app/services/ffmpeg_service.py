@@ -100,7 +100,7 @@ def get_media_info(video_path: Path, cancel_check: Callable[[], bool] | None = N
 TEXT_SUBTITLE_CODECS = {"subrip", "ass", "ssa", "webvtt", "mov_text"}
 
 
-def list_text_subtitle_streams(
+def list_subtitle_streams(
     video_path: Path,
     cancel_check: Callable[[], bool] | None = None,
 ) -> list[dict]:
@@ -117,13 +117,15 @@ def list_text_subtitle_streams(
         language = tags.get("language", "").lower()
         index = stream.get("index")
 
-        if codec_name in TEXT_SUBTITLE_CODECS:
+        if codec_name:
             disposition = stream.get("disposition", {})
             subtitle_streams.append(
                 {
                     "index": index,
                     "language": language,
                     "codec_name": codec_name,
+                    "text": codec_name in TEXT_SUBTITLE_CODECS,
+                    "title": tags.get("title", ""),
                     "default": bool(disposition.get("default")),
                     "forced": bool(disposition.get("forced")),
                     "comment": bool(disposition.get("comment")) or bool(re.search(r"\bcommentary\b", tags.get("title", ""), re.IGNORECASE)),
@@ -132,6 +134,13 @@ def list_text_subtitle_streams(
             )
 
     return subtitle_streams
+
+
+def list_text_subtitle_streams(
+    video_path: Path,
+    cancel_check: Callable[[], bool] | None = None,
+) -> list[dict]:
+    return [stream for stream in list_subtitle_streams(video_path, cancel_check) if stream["text"]]
 
 
 def find_text_subtitle_stream(

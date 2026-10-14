@@ -24,14 +24,25 @@
         <h2>Libraries and integration</h2>
         <form method="post" action="/automation/pause"><button type="submit">Pause immediately</button></form>
         <form method="post" action="/automation/scope">
+            <label for="scope_mode">Processing scope</label>
+            <select id="scope_mode" name="scope_mode">
+                <option value="selected_files" {% if config.get('scope_mode') != 'libraries' %}selected{% endif %}>Only selected video files</option>
+                <option value="libraries" {% if config.get('scope_mode') == 'libraries' %}selected{% endif %}>New imports in configured libraries (requires event-only discovery)</option>
+            </select>
             <label for="allowed_files">Process only these exact video files (one per line)</label>
             <textarea id="allowed_files" name="allowed_files" rows="3">{{ allowed_files_text }}</textarea>
-            <p>An empty selection permits no files. Other queued imports remain pending.</p>
-            <button type="submit">Apply selected-file scope</button>
+            <p>In selected-file mode an empty selection permits no files. Expanding to new library imports pauses processing for review.</p>
+            <button type="submit">Apply processing scope</button>
         </form>
         <form method="post" action="/automation/settings">
             <label class="toggle"><input type="checkbox" name="enabled" value="true"
                 {% if config.enabled %}checked{% endif %}> Enable automatic processing</label>
+            <label for="discovery_mode">New-media discovery</label>
+            <select id="discovery_mode" name="discovery_mode">
+                <option value="events_only" {% if config.get('discovery_mode') == 'events_only' %}selected{% endif %}>Import events only (preserve historical library)</option>
+                <option value="reconcile_libraries" {% if config.get('discovery_mode', 'reconcile_libraries') == 'reconcile_libraries' %}selected{% endif %}>Reconcile configured scope</option>
+            </select>
+            <p>Pending imports still wait for English subtitles. Exact-file scope always checks only selected files.</p>
             <label for="roots">Automation library directories (one per line)</label>
             <textarea id="roots" name="roots" rows="3">{{ roots_text }}</textarea>
             <details><summary>Service path mappings</summary>
@@ -50,6 +61,11 @@
     </section>
     <section class="panel">
         <h2>Processing queue</h2>
+        <p>Daily spending guard: {{ 'enabled' if budget.enabled else 'not configured' }}.
+            {% if budget.enabled %}Reserved USD {{ '%.4f'|format(budget.reserved_usd) }} of USD {{ '%.2f'|format(budget.limit_usd) }} (UTC).
+            Reasoning tokens: {{ budget.reasoning_tokens }}. Reservations include failed requests and are never refunded.{% endif %}</p>
+        {% if counts.get('failed', 0) %}<p role="alert">{{ counts.failed }} translation(s) need review. See details and retry below.</p>{% endif %}
+        {% if counts.get('waiting_budget', 0) %}<p role="alert">Spending limit reached. Pending translations resume next UTC day.</p>{% endif %}
         <p>{% for state, count in counts.items() %}{{ state }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
         <div style="overflow-x:auto"><table>
             <thead><tr><th>Media</th><th>Status</th><th>Attempts</th><th>Details</th><th>Action</th></tr></thead>

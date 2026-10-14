@@ -40,7 +40,7 @@ def deliver(url, service, payload, token, attempts=3):
             pass
         if attempt + 1 < attempts:
             time.sleep(min(2**attempt, 8))
-    raise RuntimeError("Automation endpoint unavailable; periodic library reconciliation recovers missed events.")
+    raise RuntimeError("Automation endpoint unavailable; re-deliver this exact import or reconcile an approved selected file.")
 
 
 def main():

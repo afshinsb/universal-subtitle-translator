@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import automation
+from app.services import automation, daily_budget
 from app.template_context import configure_templates
 
 router = APIRouter(prefix="/automation")
@@ -26,7 +26,7 @@ def dashboard(request: Request):
     cfg = automation.config()
     return templates.TemplateResponse(request=request, name="automation.html", context={
         "config": cfg, "queue": automation.list_queue(), "counts": automation.counts(),
-        "provider_ready": bool(automation.settings.openai_api_key),
+        "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(),
         "roots_text": "\n".join(cfg["roots"]),
         "allowed_files_text": "\n".join(cfg.get("allowed_files", [])),
         "mappings_text": json.dumps(cfg["path_mappings"], indent=2),
@@ -37,16 +37,17 @@ def dashboard(request: Request):
 def status():
     cfg = automation.config()
     return {"enabled": cfg["enabled"], "roots": cfg["roots"], "scope_mode": cfg.get("scope_mode", "libraries"), "allowed_files": cfg.get("allowed_files", []), "counts": automation.counts(),
-            "provider_ready": bool(automation.settings.openai_api_key), "queue": automation.list_queue()}
+            "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(), "discovery_mode": cfg.get("discovery_mode", "reconcile_libraries"), "queue": automation.list_queue()}
 
 
 @router.post("/settings")
 def update_settings(request: Request, enabled: bool = Form(False),
-                    roots: str = Form(""), path_mappings: str = Form("{}")):
+                    roots: str = Form(""), path_mappings: str = Form("{}"),
+                    discovery_mode: str = Form("reconcile_libraries")):
     check_origin(request)
     try:
         automation.save_config(enabled, [line.strip() for line in roots.splitlines() if line.strip()],
-                               json.loads(path_mappings))
+                               json.loads(path_mappings), discovery_mode)
     except (ValueError, TypeError) as exc:
         raise HTTPException(422, str(exc)) from exc
     return RedirectResponse("/automation", status_code=303)
@@ -62,10 +63,10 @@ def pause(request: Request):
 
 
 @router.post("/scope")
-def scope(request: Request, allowed_files: str = Form("")):
+def scope(request: Request, allowed_files: str = Form(""), scope_mode: str = Form("selected_files")):
     check_origin(request)
     try:
-        automation.save_scope([line.strip() for line in allowed_files.splitlines() if line.strip()])
+        automation.save_scope([line.strip() for line in allowed_files.splitlines() if line.strip()], scope_mode)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return RedirectResponse("/automation", status_code=303)
@@ -140,6 +141,10 @@ async def webhook(service: str, request: Request):
         selected = [path for path in mapped if automation.permitted_file(path)]
         if not selected:
             return {"status": "ignored", "reason": "Outside selected processing scope or real processing disabled."}
+        if service == "bazarr":
+            selected = [path for path in selected if automation.accepts_subtitle_event(path)]
+            if not selected:
+                return {"status": "ignored", "reason": "Waiting for a media import; historical subtitles are not queued."}
         items = [automation.enqueue(str(path), service) for path in selected]
     except (ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(422, str(exc)) from exc

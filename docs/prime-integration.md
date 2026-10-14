@@ -1,3 +1,10 @@
+# Current activation plan
+
+See [final-automation-activation.md](final-automation-activation.md) for the
+current Medium reasoning pilot, spending guards and production integration
+checklist. The historical preparation below remains evidence; its old model,
+benchmark and activation proposals are superseded.
+
 # Prime real-media integration preparation
 
 Prepared on 2026-10-14 in /home/afshin/projects/universal-subtitle-translator,

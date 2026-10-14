@@ -26,7 +26,7 @@ def library(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "openai_api_key", "")
     monkeypatch.setattr(automation.worker, "start", lambda: None)
     monkeypatch.setattr(automation.worker, "stop", lambda: None)
-    monkeypatch.setattr(automation, "list_text_subtitle_streams", lambda path: [])
+    monkeypatch.setattr(automation, "list_subtitle_streams", lambda path: [])
     ensure_directories()
     init_db()
     automation.init_schema()
@@ -57,7 +57,7 @@ def provider(monkeypatch):
 
     monkeypatch.setattr(settings, "openai_api_key", "sk-fixture-only")
     monkeypatch.setattr(translator, "get_openai_client", lambda: OpenAI(api_key="sk-fixture-only",
-        base_url="http://fixture.invalid/v1", max_retries=0,
+        base_url="https://api.openai.com/v1", max_retries=0,
         http_client=httpx.Client(transport=httpx.MockTransport(request))))
     return prompts
 
@@ -122,7 +122,7 @@ def test_embedded_source_avoids_forced_commentary_and_foreign(library, provider,
         {"index":3,"language":"eng","forced":False,"comment":True,"default":True},
         {"index":4,"language":"eng","forced":False,"comment":False,"default":False},
     ]
-    monkeypatch.setattr(automation, "list_text_subtitle_streams", lambda path: streams)
+    monkeypatch.setattr(automation, "list_subtitle_streams", lambda path: streams)
     extracted = []
     def extract(path, output, stream_index):
         extracted.append(stream_index)
@@ -416,9 +416,122 @@ def test_persian_sidecar_variant_prevents_duplicate_translation(library, provide
 def test_embedded_persian_prevents_duplicate_translation(library, provider, monkeypatch):
     video = media(library)
     video.with_suffix(".en.srt").write_text(ENGLISH)
-    monkeypatch.setattr(automation,"list_text_subtitle_streams",lambda path:[
+    monkeypatch.setattr(automation,"list_subtitle_streams",lambda path:[
         {"index":1,"language":"fas","forced":False,"comment":False,"default":True}])
     item = automation.enqueue(str(video))
     automation.process_one()
     assert queued(item)["status"] == "skipped"
     assert not video.with_suffix(".fa.srt").exists() and not provider
+
+def test_event_only_mode_never_scans_history_but_processes_import(library, provider):
+    old = media(library, "Old.mkv")
+    imported = media(library, "New.mkv")
+    imported.with_suffix(".en.srt").write_text(ENGLISH)
+    automation.save_config(True, [str(library)], {}, "events_only")
+    assert automation.reconcile() == 0 and not automation.list_queue()
+    item = automation.enqueue(str(imported), "sonarr")
+    automation.process_one()
+    assert queued(item)["status"] == "done"
+    assert not old.with_suffix(".fa.srt").exists()
+    assert len(automation.list_queue()) == 1
+    automation.save_scope([str(old)])
+    assert automation.reconcile() == 1  # Exact pilot selection still reconciles.
+
+
+def test_daily_cap_waits_without_exhausting_queue_retry_limit(library, provider, monkeypatch):
+    video = media(library)
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    monkeypatch.setattr(settings, "openai_daily_budget_usd", 0.001)
+    monkeypatch.setattr(settings, "openai_budget_input_ceiling_per_1m", 0.125)
+    monkeypatch.setattr(settings, "openai_budget_output_per_1m", 0.5)
+    monkeypatch.setattr(settings, "openai_reasoning_effort", "medium")
+    monkeypatch.setattr(settings, "openai_max_completion_tokens", 32768)
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    row = queued(item)
+    assert row["status"] == "waiting_budget" and row["attempts"] == 0
+    assert row["next_run"] > 0
+    assert not provider and not video.with_suffix(".fa.srt").exists()
+    assert not automation.process_one(item["id"])
+
+
+@pytest.mark.parametrize("language,title", [("fas", ""), ("und", "Persian")])
+def test_bitmap_or_title_tagged_persian_is_preserved(library, provider, monkeypatch, language, title):
+    video = media(library)
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    monkeypatch.setattr(automation, "list_subtitle_streams", lambda path: [
+        {"index": 2, "language": language, "title": title, "text": False,
+         "codec_name": "hdmv_pgs_subtitle", "forced": False, "comment": False, "default": False}])
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    assert queued(item)["status"] == "skipped"
+    assert not provider and not video.with_suffix(".fa.srt").exists()
+
+
+def test_single_automatic_translation_across_workers(library):
+    first = automation.enqueue(str(media(library, "One.mkv")))
+    second = automation.enqueue(str(media(library, "Two.mkv")))
+    owner = automation.claim(first["id"])
+    assert owner and automation.claim(second["id"]) is None
+    automation.finish(owner, "waiting_source", "English delayed", 60)
+    assert automation.claim(second["id"])
+
+
+def test_event_only_delayed_source_survives_schema_restart(library, provider):
+    video = media(library)
+    automation.save_config(True, [str(library)], {}, "events_only")
+    item = automation.enqueue(str(video), "radarr")
+    automation.process_one()
+    assert queued(item)["status"] == "waiting_source"
+    automation.init_schema()
+    assert automation.config()["discovery_mode"] == "events_only"
+    assert automation.reconcile() == 0
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    assert automation.enqueue(str(video), "bazarr")["id"] == item["id"]
+    automation.process_one()
+    assert queued(item)["status"] == "done"
+
+
+@pytest.mark.parametrize("suffix", [".fa.ass", ".fas.vtt", ".per.idx"])
+def test_non_srt_persian_sidecars_are_preserved(library, provider, suffix):
+    video = media(library)
+    existing = video.with_suffix(suffix)
+    existing.write_bytes(b"Existing subtitle data")
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    assert queued(item)["status"] == "skipped"
+    assert existing.read_bytes() == b"Existing subtitle data"
+    assert not provider and not video.with_suffix(".fa.srt").exists()
+
+
+def test_event_only_bazarr_wakes_imports_without_seeding_history(library, api):
+    video = media(library, "Historical.mkv")
+    automation.save_config(True, [str(library)], {"/tv": str(library)}, "events_only")
+    payload = {"eventType": "SubtitleDownloaded", "video_path": "/tv/Historical.mkv", "language": "en"}
+    assert api.post("/automation/hooks/bazarr", json=payload, headers=headers()).json()["status"] == "ignored"
+    assert not automation.list_queue()
+    imported = api.post("/automation/hooks/sonarr", json={"eventType": "Download",
+        "episodeFile": {"path": "/tv/Historical.mkv"}}, headers=headers())
+    completion = api.post("/automation/hooks/bazarr", json=payload, headers=headers())
+    assert completion.json()["queue_ids"] == imported.json()["queue_ids"]
+    assert len(automation.list_queue()) == 1 and video.is_file()
+
+
+def test_expanding_to_new_import_libraries_requires_event_only_and_pauses(library):
+    video = media(library)
+    automation.save_scope([str(video)])
+    with pytest.raises(ValueError, match="event-only"):
+        automation.save_scope([], "libraries")
+    automation.save_config(True, [str(library)], {}, "events_only")
+    cfg = automation.save_scope([], "libraries")
+    assert cfg["scope_mode"] == "libraries" and cfg["enabled"] is False
+    assert automation.reconcile() == 0 and not automation.list_queue()
+
+
+def test_new_import_library_scope_cannot_be_changed_to_historical_scan(library):
+    automation.save_config(False, [str(library)], {}, "events_only")
+    automation.save_scope([], "libraries")
+    with pytest.raises(ValueError, match="keep event-only"):
+        automation.save_config(True, [str(library)], {}, "reconcile_libraries")
+    assert automation.config()["enabled"] is False
+    assert automation.config()["discovery_mode"] == "events_only"

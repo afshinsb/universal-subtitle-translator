@@ -10,9 +10,11 @@ from uuid import uuid4
 
 from app.config import settings
 from app.database import get_connection, create_job, get_job, utc_now
-from app.services.ffmpeg_service import list_text_subtitle_streams, extract_subtitle
+from app.services.ffmpeg_service import list_subtitle_streams, extract_subtitle
 from app.services.media_scanner import VIDEO_EXTENSIONS, sidecar_subtitles, subtitle_language_from_name, translated_output_exists
 from app.services.subtitle_io import read_srt
+from app.services.pilot_budget import pilot_scope
+from app.services.daily_budget import DailyBudgetExceeded, retry_delay
 from app.services.job_runner import run_translation_job, register_active_job, unregister_active_job, cancel_job
 
 logger = logging.getLogger(__name__)
@@ -58,8 +60,18 @@ def permitted_file(path, cfg=None):
     return True
 
 
-def save_scope(paths):
+def save_scope(paths, mode="selected_files"):
     cfg = config()
+    if mode not in {"selected_files", "libraries"}:
+        raise ValueError("Invalid processing scope.")
+    if mode == "libraries":
+        if cfg.get("discovery_mode") != "events_only":
+            raise ValueError("New-library import scope requires event-only discovery.")
+        # Expanding scope always pauses; operator reviews before enabling.
+        cfg.update(scope_mode="libraries", enabled=False)
+        with get_connection() as conn:
+            conn.execute("UPDATE automation_config SET value=? WHERE id=1", (json.dumps(cfg),))
+        return cfg
     if len(paths) > 50:
         raise ValueError("Selected-file scope is limited to 50 videos.")
     checked = [str(checked_path(value, cfg)) for value in paths]
@@ -103,7 +115,7 @@ def checked_path(value, cfg=None):
     return path
 
 
-def save_config(enabled, roots, mappings):
+def save_config(enabled, roots, mappings, discovery_mode=None):
     cfg = config()
     candidate = {**cfg, "roots": roots}
     normalized = []
@@ -121,6 +133,12 @@ def save_config(enabled, roots, mappings):
         raise ValueError("Path mappings must map absolute source directories to absolute destination directories.")
     for destination in mappings.values():
         checked_path(destination, {**candidate, "roots": normalized})
+    if discovery_mode is not None:
+        if discovery_mode not in {"reconcile_libraries", "events_only"}:
+            raise ValueError("Invalid discovery mode.")
+        if cfg.get("scope_mode") == "libraries" and discovery_mode != "events_only":
+            raise ValueError("New-library import scope must keep event-only discovery.")
+        cfg["discovery_mode"] = discovery_mode
     cfg.update(enabled=bool(enabled), roots=normalized, path_mappings=mappings)
     with get_connection() as conn:
         conn.execute("UPDATE automation_config SET value=? WHERE id=1", (json.dumps(cfg),))
@@ -178,6 +196,14 @@ def enqueue(value, origin="scan"):
         return dict(conn.execute("SELECT * FROM automation_queue WHERE id=?", (item_id,)).fetchone())
 
 
+def accepts_subtitle_event(path):
+    cfg = config()
+    if cfg.get("discovery_mode") != "events_only" or cfg.get("scope_mode") == "selected_files":
+        return True
+    with get_connection() as conn:
+        return conn.execute("SELECT 1 FROM automation_queue WHERE video_path=?", (str(Path(path).resolve()),)).fetchone() is not None
+
+
 def list_queue(limit=200):
     with get_connection() as conn:
         return [dict(row) for row in conn.execute(
@@ -222,8 +248,10 @@ def claim(item_id=None):
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("""UPDATE automation_queue SET status='queued',owner=NULL,
             message='Recovered expired worker lease' WHERE status='running' AND lease_until<?""", (now,))
+        if conn.execute("SELECT COUNT(*) FROM automation_queue WHERE status='running' AND lease_until>=?", (now,)).fetchone()[0]:
+            return None  # One automation translation across worker processes.
         row = conn.execute("""SELECT * FROM automation_queue
-            WHERE status IN ('queued','retry','waiting_media','waiting_source','waiting_config')
+            WHERE status IN ('queued','retry','waiting_media','waiting_source','waiting_config','waiting_budget')
             AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY next_run,created_at LIMIT 1",
             [now, item_id, item_id, *scope_args]).fetchone()
         if not row:
@@ -261,8 +289,8 @@ def select_source(video, item_id, streams=None):
                 return path
         except RuntimeError:
             logger.warning("English sidecar is incomplete; waiting for another candidate.")
-    streams = [stream for stream in (streams if streams is not None else list_text_subtitle_streams(video))
-               if stream["language"] in {"eng", "en"} and not stream["forced"] and not stream["comment"]]
+    streams = [stream for stream in (streams if streams is not None else list_subtitle_streams(video))
+               if stream.get("text", True) and stream["language"] in {"eng", "en"} and not stream["forced"] and not stream["comment"]]
     if not streams:
         return None
     chosen = sorted(streams, key=lambda stream: (bool(stream.get("hearing_impaired")), not stream["default"], stream["index"]))[0]
@@ -274,6 +302,20 @@ def select_source(video, item_id, streams=None):
     return output
 
 
+def existing_persian_sidecar(video):
+    existing = translated_output_exists(video.parent, video.stem, "Persian")
+    if existing:
+        return existing
+    for path in sorted(video.parent.iterdir()):
+        if path.suffix.lower() not in {".ass", ".ssa", ".vtt", ".sub", ".idx"}:
+            continue
+        if not path.stem.casefold().startswith(video.stem.casefold() + "."):
+            continue
+        if path.is_file() and subtitle_language_from_name(path, video.stem) == "fa":
+            return checked_path(str(path))
+    return None
+
+
 def process(item):
     path = checked_path(item["video_path"])
     if not permitted_file(path):
@@ -283,19 +325,20 @@ def process(item):
         finish(item, "waiting_media", "Waiting for imported media", WAIT_SECONDS)
         return
     output = path.with_suffix(".fa.srt")
-    existing_output = translated_output_exists(path.parent, path.stem, "Persian")
+    existing_output = existing_persian_sidecar(path)
     if existing_output:
         # Never replace user subtitles or partial/invalid existing files silently.
-        cues = read_srt(existing_output)
-        if not cues or any(not cue.text.strip() for cue in cues):
-            raise RuntimeError("Existing Persian subtitle is incomplete; review it manually.")
+        if existing_output.suffix.lower() == ".srt":
+            cues = read_srt(existing_output)
+            if not cues or any(not cue.text.strip() for cue in cues):
+                raise RuntimeError("Existing Persian subtitle is incomplete; review it manually.")
         finish(item, "skipped", "Existing Persian subtitle preserved", output_path=str(existing_output))
         return
     if not os.access(path.parent, os.W_OK):
         finish(item, "waiting_config", "Media directory is read-only", WAIT_SECONDS)
         return
-    streams = list_text_subtitle_streams(path)
-    if any(stream["language"] in {"fa", "fas", "per"} for stream in streams):
+    streams = list_subtitle_streams(path)
+    if any(stream["language"] in {"fa", "fas", "per"} or any(label in stream.get("title", "").lower() for label in {"persian", "farsi", "فارسی"}) for stream in streams):
         finish(item, "skipped", "Existing embedded Persian subtitle preserved")
         return
     source = select_source(path, item["id"], streams)
@@ -316,6 +359,10 @@ def process(item):
         if not config()["enabled"] or not permitted_file(path):
             raise RuntimeError("Automation paused or processing scope changed.")
         checked_path(str(path))
+        if signature(path) != item["signature"]:
+            raise RuntimeError("Media changed during translation; review imported file.")
+        if existing_persian_sidecar(path):
+            raise RuntimeError("Persian subtitle appeared during translation; preserve it.")
         with get_connection() as conn:
             owned = conn.execute("SELECT owner,lease_until FROM automation_queue WHERE id=?",
                                  (item["id"],)).fetchone()
@@ -324,12 +371,15 @@ def process(item):
 
     register_active_job(job_id)
     try:
-        run_translation_job(job_id, str(source), source.name, "Persian", "natural_conversational",
-                            output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish)
+        with pilot_scope(path, source):
+            run_translation_job(job_id, str(source), source.name, "Persian", "natural_conversational",
+                                output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish)
     finally:
         unregister_active_job(job_id)
     job = get_job(job_id)
     if job["status"] != "done":
+        if "Daily spending ceiling reached" in str(job.get("error") or job.get("message")):
+            raise DailyBudgetExceeded("Daily spending ceiling reached; waiting for next UTC day.")
         raise RuntimeError(job.get("error") or job.get("message") or "Translation did not complete.")
     # The engine validates every cue before atomically publishing the output.
     finish(item, "done", "Persian subtitles completed", output_path=str(output))
@@ -352,6 +402,8 @@ def process_one(item_id=None):
     heartbeat_thread.start()
     try:
         process(item)
+    except DailyBudgetExceeded as exc:
+        finish(item, "waiting_budget", str(exc), retry_delay(), attempts=item["attempts"])
     except Exception as exc:
         with get_connection() as conn:
             row = conn.execute("SELECT attempts FROM automation_queue WHERE id=?", (item["id"],)).fetchone()
@@ -375,6 +427,9 @@ def reconcile():
                 enqueue(value, "reconciliation")
                 found += 1
         return found
+    if cfg.get("discovery_mode") == "events_only":
+        # Durable imported queue rows still retry/wait; do not enumerate history.
+        return 0
     for root in cfg["roots"]:
         checked_path(root)
         for directory, dirs, names in os.walk(root, followlinks=False):

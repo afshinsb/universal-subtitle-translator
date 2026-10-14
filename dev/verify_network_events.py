@@ -12,7 +12,7 @@ manifest = json.loads((ROOT/"dev/runtime/data/integration-fixtures.json").read_t
 token = subprocess.check_output(["docker","exec","ust-dev-backend","python","-c",
     "from app.services.automation import config; print(config()['webhook_token'])"],text=True).strip()
 program = """
-import json,sys,urllib.request,urllib.error,http.server,threading
+import json,sys,urllib.request,urllib.error,http.server,threading,base64
 sys.path.insert(0,"/relay")
 from automation_event import deliver
 job=json.load(sys.stdin)
@@ -31,6 +31,11 @@ assert probe("/login")[0]==404
 assert probe("/automation/hooks/sonarr",{"eventType":"Test"})[0]==401
 assert probe("/automation/hooks/sonarr",{"eventType":"Test"},"wrong-token")[0]==401
 assert probe("/automation/hooks/sonarr",{"eventType":"Test"},token)[0]==200
+basic=base64.b64encode(("automation:"+token).encode()).decode()
+request=urllib.request.Request(base+"/automation/hooks/"+job["service"],
+    data=b'{"eventType":"Test"}',headers={"Content-Type":"application/json","Authorization":"Basic "+basic})
+with urllib.request.urlopen(request,timeout=10) as response:
+    assert response.status==200 and json.load(response)["test"] is True
 if job["phase"]=="imports":
     if job["service"]=="sonarr":
         payload={"eventType":"Rename","episodeFiles":[{"path":path} for path in job["paths"]]}

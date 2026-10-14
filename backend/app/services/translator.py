@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from openai import OpenAI
 
 from app.services.pilot_budget import SYSTEM_PROMPT, reserve_request
+from app.services.daily_budget import reserve_daily, record_usage
 from app.config import settings
 from app.models import LANGUAGE_CODES, has_persian_characters, is_persian_language, normalize_language
 
@@ -334,20 +335,25 @@ def provider_request_options() -> dict:
 
 def call_openai(prompt: str) -> TranslationResult:
     with get_openai_client() as client:
-        if os.getenv("UST_PILOT_BUDGET_FILE"):
+        if os.getenv("UST_PILOT_BUDGET_FILE") or settings.openai_daily_budget_usd:
             if str(client.base_url).rstrip("/") != "https://api.openai.com/v1":
                 raise RuntimeError("Pilot prices apply only to the official OpenAI endpoint.")
         guarded = reserve_request(settings.openai_model, prompt)
-        request_client = client.with_options(max_retries=0) if guarded else client
+        options = guarded if guarded else provider_request_options()
+        if settings.openai_daily_budget_usd:
+            options["service_tier"] = "default"
+        reservation = reserve_daily(settings.openai_model, prompt, options)
+        request_client = client.with_options(max_retries=0) if guarded or reservation else client
         response = request_client.chat.completions.create(
             model=settings.openai_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            **(guarded if guarded else provider_request_options()),
+            **options,
         )
 
+    record_usage(reservation, getattr(response, "usage", None))
     if not response.choices:
         raise RuntimeError("The translation provider returned no choices.")
 

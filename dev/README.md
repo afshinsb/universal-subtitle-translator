@@ -209,3 +209,16 @@ Normal automation remains paused and real-library processing remains disabled.
 The release example retains its existing model default.
 
 Model documentation: https://developers.openai.com/api/docs/models/gpt-6-luna
+
+### Final automation activation
+
+See docs/final-automation-activation.md and docs/production-promotion.md.
+Normal automation remains paused, real-library processing=false, and the pilot
+approval/Compose files are inactive drafts. OPENAI_DAILY_BUDGET_USD defaults to 0
+(off); configure a separately approved positive limit and conservative rates
+before normal automation activation. The persistent provider-budget.sqlite must
+not be reset/deleted. Configuration is sealed; review any change while paused.
+The automation UI now exposes event-only discovery, exact/new-import scopes,
+budget reservations and failure/retry controls. New-import library scope requires
+event-only mode and pauses on expansion. One automatic translation is leased
+across workers. Bazarr completions wake known imports instead of queuing history.
