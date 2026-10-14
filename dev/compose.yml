@@ -1,0 +1,88 @@
+name: ust-dev
+services:
+  backend:
+    image: ust-dev-backend:1.8.2-5568f9e
+    build:
+      context: ../backend
+      args:
+        APP_VERSION: 1.8.2
+    container_name: ust-dev-backend
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "2288", "--reload", "--reload-dir", "/app/app"]
+    env_file: .env
+    environment:
+      APP_PORT: "2288"
+      APP_VERSION: 1.8.2
+      DEV_MODE: "true"
+      DEMO_MODE: "false"
+      AUTH_ENABLED: "true"
+      SESSION_HTTPS_ONLY: "false"
+      OPENAI_API_KEY: ""
+      PYTHON_DOTENV_DISABLED: "1"
+      BATCH_FILE_CONCURRENCY: "1"
+      MAX_UPLOAD_MB: "1024"
+      DATA_DIR: /app/data
+      UPLOAD_DIR: /app/data/uploads
+      OUTPUT_DIR: /app/data/outputs
+      TEMP_DIR: /app/data/temp
+      DATABASE_PATH: /app/data/app.db
+      MEDIA_ROOT: /media
+    volumes:
+      - ../backend/app:/app/app:ro
+      - ../scripts:/smoke:ro
+      - ./runtime/data:/app/data
+      - ./runtime/fixtures:/media/fixtures
+      - /tank/share/media/movies:/media/movies:ro
+      - /tank/share/media/shows:/media/shows:ro
+    user: "1000:1000"
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    stop_grace_period: 30s
+    expose: ["2288"]
+    extra_hosts:
+      - "prime-host:192.168.0.100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2288/health', timeout=3).read()"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "2"}
+  frontend:
+    image: ust-dev-frontend:1.8.2-5568f9e
+    build:
+      context: ../frontend
+      args:
+        APP_VERSION: 1.8.2
+    container_name: ust-dev-frontend
+    environment:
+      BACKEND_PORT: "2288"
+      NGINX_CLIENT_MAX_BODY_SIZE: 1G
+    volumes:
+      - ../frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      backend: {condition: service_healthy}
+    ports: ["127.0.0.1:2289:80"]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "2"}
+networks:
+  default:
+    name: ust-dev_default

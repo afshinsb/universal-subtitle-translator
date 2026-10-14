@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")/.."
+exec docker compose --env-file dev/.env -f dev/compose.yml "$@"

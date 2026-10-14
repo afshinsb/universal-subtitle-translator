@@ -1,0 +1,177 @@
+# Prime development environment
+
+Workspace: /home/afshin/projects/universal-subtitle-translator.
+Branch dev/prime-environment, based on main 5568f9e, version 1.8.2.
+Upstream CI passed:
+https://github.com/afshinsb/universal-subtitle-translator/actions/runs/38597986971
+
+Atlas Codex is the development agent, accessing Prime over
+ssh afshin@192.168.0.100. This is separate from recovered production Compose.
+
+## Windows access
+
+Keep the following running in a terminal. ssh -N is silent while connected.
+
+~~~powershell
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:2289:127.0.0.1:2289 prime
+~~~
+
+If the alias is absent, use afshin@192.168.0.100.
+Open http://localhost:2289. ALIEN browser login-page access was confirmed
+by the user. Username: prime-dev. Retrieve the password privately:
+
+~~~powershell
+ssh afshin@192.168.0.100 "sed -n 's/^ADMIN_PASSWORD=//p' /home/afshin/projects/universal-subtitle-translator/dev/.env"
+~~~
+
+Do not share the password output. dev/.env is mode 0600 and Git-ignored.
+There are no firewall changes or public development port bindings.
+
+## Operations and editing
+
+Run from the checkout:
+
+~~~sh
+./dev/ust up -d --wait
+./dev/ust ps
+./dev/ust logs -f --tail 100 backend frontend
+./dev/ust stop
+./dev/ust start
+~~~
+
+The wrapper explicitly selects dev/compose.yml and dev/.env.
+Project/network: ust-dev / ust-dev_default.
+Containers: ust-dev-backend and ust-dev-frontend.
+Images: ust-dev-backend:1.8.2-5568f9e and ust-dev-frontend:1.8.2-5568f9e.
+Backend port 2288 is internal; frontend publishes 127.0.0.1:2289 -> 80.
+
+Both containers have health checks, unless-stopped restart policies,
+bounded logs, CPU/PID limits, and memory limits (backend 768 MiB;
+frontend 128 MiB). Idle memory was about 91 MiB and 6 MiB.
+
+backend/app is bind-mounted read-only inside the backend; edit the host
+source as afshin. Uvicorn runs:
+
+~~~sh
+python -m uvicorn app.main:app --host 0.0.0.0 --port 2288 --reload --reload-dir /app/app
+~~~
+
+Python edits reload automatically. Templates/CSS/JavaScript in backend/app
+appear on browser refresh; hard-refresh cached browser assets.
+Environment/mount changes require ./dev/ust up -d --force-recreate.
+Dependency/Dockerfile changes require sequential builds:
+
+~~~sh
+./dev/ust build backend
+./dev/ust build frontend
+./dev/ust up -d --wait
+~~~
+
+Nginx config is bind-mounted as a template. After frontend/nginx.conf
+changes, run ./dev/ust up -d --force-recreate frontend so the entrypoint
+renders the updated config. Ordinary source changes need no rebuild.
+
+## Storage and media
+
+| Host | Container | Access |
+| --- | --- | --- |
+| dev/runtime/data | /app/data | UID/GID 1000:1000, writable |
+| dev/runtime/fixtures | /media/fixtures | UID/GID 1000:1000, writable |
+| /tank/share/media/movies | /media/movies | read-only |
+| /tank/share/media/shows | /media/shows | read-only |
+
+SQLite: dev/runtime/data/app.db. Uploads, outputs and temporary files have
+separate subdirectories there. MEDIA_ROOT=/media restricts batch paths.
+No production data or secrets are mounted. For generated tests use
+/media/fixtures; real scanning uses /media/movies or /media/shows.
+
+No AI key is configured, so ordinary UI translation is blocked.
+Fixture scripts mock the provider only within their own process.
+The v1.8.2 scanner supports output/temp fallback for unwritable media.
+Real media was inspected without translation or writes. A movie had three
+tagged English text streams. External English SRTs were readable in both
+libraries (sample counts 1086 and 598 cues). Ten sampled show videos had
+no tagged English text streams; generated fixtures verify that workflow.
+
+Discovered existing networks: Sonarr sonarr_default; Radarr radarr_default;
+Bazarr bazarr_default; qBittorrent qbittorrent_default;
+subs-translator subtitle-tools_default. Jellyfin runs as a native service.
+Development joins only ust-dev_default and accesses services via
+prime-host (192.168.0.100) on existing published ports.
+
+Existing service configs: /opt/containers/<service>/config.
+Jellyfin paths: /var/lib/jellyfin and /etc/jellyfin.
+Shared scripts: /opt/containers/subtitle-scripts.
+Media: /tank/share/media/movies and /tank/share/media/shows.
+qBittorrent data: /tank/share/downloads and /tank/share/incomplete.
+No existing Docker networks, hooks, mounts, or ownership were changed.
+No Docker socket or production service configs are mounted in development.
+
+## Verification
+
+Actual Linux image builds passed. Credential-free smoke ran with networking
+disabled, generated embedded English subtitles and mocked translations,
+validated timing/Unicode/SRT output, and preserved output on a repeat run:
+
+~~~sh
+docker run --rm --network none --memory 512m --cpus 1 \
+  -v "$PWD/scripts:/smoke:ro" --entrypoint python \
+  ust-dev-backend:1.8.2-5568f9e /smoke/smoke.py
+~~~
+
+Targeted checks:
+
+~~~sh
+python3 dev/verify_http.py
+docker exec -i ust-dev-backend python < dev/verify_backend.py
+docker exec -i ust-dev-backend python < dev/verify_persian.py
+python3 dev/verify_services.py
+python3 dev/verify_reload.py
+~~~
+
+verify_backend regenerates only dev fixture media, checks real media reads,
+and creates a dev SQLite marker. verify_persian creates a generated .fa.srt
+and persistent completed dev batch using an in-memory HTTP mock.
+verify_services makes GET requests only, reading existing service API keys
+transiently without printing or storing them.
+verify_reload temporarily edits Python/templates/CSS and restores all edits;
+run while development is idle because Python reload interrupts running jobs.
+
+Passed: health, frontend/backend proxying, correct/incorrect login,
+session cookie, FFmpeg/FFprobe, extraction, external English SRT reading,
+fixture translation, Persian Unicode/RTL/timing, duplicate preservation,
+Python reload, template/static refresh, container restart, SQLite persistence.
+Persian output has two dialogue cues plus the existing application watermark.
+
+Sonarr/Radarr/Bazarr authenticated system-status GETs returned 200.
+Jellyfin public info returned 200 (10.11.11).
+qBittorrent returned 403 to unauthenticated version GET; authenticated API
+validation remains pending. subs-translator was inspected only.
+
+Private evidence: dev/runtime/evidence. All 30 pre-existing containers kept
+their IDs, image IDs, start times, and restart counts; production /health
+still returns 1.4.0. SSH tunnel health/login access passed from Atlas and
+the user confirmed the Windows login page.
+
+## Git, promotion, rollback
+
+Commit infrastructure/source changes only; dev/.env and dev/runtime are ignored.
+Use Git commits as checkpoints and review changes before a PR.
+Production promotion requires a separate release with explicit authorization,
+backup, migration review, and production rollback planning.
+
+To stop and remove development containers/network, run ./dev/ust down.
+Bind-mounted dev data remains. Revert source with Git; rebuild only when
+build-time components change. Production remains on port 2288.
+Never run the repository release Compose file on Prime: it hard-codes
+production container names. Never prune Docker.
+
+## Codex workflow
+
+Development uses Atlas Codex over SSH as requested.
+Before that clarification, the official standalone installer was downloaded,
+fully inspected and run as afshin. It installed CLI 0.162.1 at ~/.local/bin/codex
+with packages under ~/.codex/packages/standalone and a PATH block in ~/.bashrc.
+No Node.js/system packages were installed. Existing ChatGPT auth was detected.
+The Prime CLI is unused and optional; its credentials were not displayed.
+If explicitly wanted later: cd into this checkout and run ~/.local/bin/codex.

@@ -21,3 +21,7 @@ dist/
 coverage/
 htmlcov/
 .DS_Store
+
+# Prime development credentials and generated artifacts
+dev/.env
+dev/runtime/
