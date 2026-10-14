@@ -108,3 +108,31 @@ Review models at the same dialogue timestamps. Record meaningful differences
 in semantics, naturalness, character voice, humor/profanity, and context use.
 Compare Luna None/Medium separately with their measured reasoning usage and
 latency. Do not declare an automatic quality winner.
+
+
+## Explicit additional Luna Low variant
+
+The user additionally authorized a complete gpt-6-luna translation with
+reasoning_effort=low, still inside the SAME USD 5 total ceiling.
+Its output suffix is .gpt-6-luna-low.fa.srt. Temperature is omitted; its 32768
+completion cap includes hidden reasoning. Source, segmentation and prompts
+remain identical to the five original variants.
+
+Repeat the existing command with --add-luna-low (prepare), then the same flag
+plus --allow-paid (live). This appends only that explicitly permitted variant
+to the existing plan. It records the previous/new plan in the amendments table,
+preserves all original request reservations/usage/checkpoints, and checks
+reserved requests plus newly pending tasks against the unchanged cap in one
+transaction. A price, budget, source, prompt or original variant change remains
+forbidden. No fresh ledger is created and no reservation is refunded.
+
+Six first passes have a conservative planned total of USD 4.34471235.
+After the five actual runs' repairs, adding Low's first-pass reservations gives
+USD 4.521482275, below the approved USD 5. Low repairs must still fit the same
+remaining balance. The original five outputs are validated and preserved,
+never retranslated or overwritten. Keep --add-luna-low on future resumptions
+of this amended six-variant comparison.
+
+Private results-five.json preserves the first five-model report; results.json
+reports the amended run. Combine their processing durations for the six
+translations. Read per-variant usage directly from the shared cost ledger.

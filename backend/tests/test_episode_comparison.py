@@ -134,3 +134,17 @@ def test_partial_latin_dialogue_is_reported_for_human_review():
     report = validate_output(original,result)
     assert report["mixed_latin_review"] == [
         {"cue":63,"timestamp":"00:04:42,657","words":["fuckin'"]}]
+
+
+def test_explicit_low_extension_preserves_completed_outputs_and_cost_records(tmp_path,monkeypatch):
+    movie,source,prices,calls = setup(tmp_path,monkeypatch)
+    first = run(movie,source,prices,5,True)
+    hashes = {v:o["sha256"] for v,o in first["outcomes"].items()}
+    second = run(movie,source,prices,5,True,add_luna_low=True)
+    assert len(calls)==6
+    assert second["outcomes"]["gpt-6-luna-low"]["status"]=="done"
+    assert second["models"]["gpt-4o-mini"]["requests"]==1
+    for v in hashes:
+        assert second["outcomes"][v]["sha256"]==hashes[v]
+        assert second["outcomes"][v]["status"]=="preserved_existing"
+    assert calls[-1]["reasoning_effort"]=="low" and "temperature" not in calls[-1]

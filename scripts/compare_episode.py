@@ -95,13 +95,14 @@ def validate_output(source, result):
 
 
 class Ledger:
-    def __init__(self, path, plan, tasks):
+    def __init__(self, path, plan, tasks, allow_extend=False):
         self.path = Path(path)
         self.limit = units(plan["budget_usd"])
         fingerprint = json.dumps(plan,sort_keys=True)
         with self.connect() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS config(id INTEGER PRIMARY KEY,value TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS amendments(id INTEGER PRIMARY KEY,created TEXT DEFAULT CURRENT_TIMESTAMP,previous TEXT,updated TEXT);
                 CREATE TABLE IF NOT EXISTS tasks(variant TEXT,number INTEGER,reservation INTEGER,
                     status TEXT DEFAULT 'pending',translations TEXT,PRIMARY KEY(variant,number));
                 CREATE TABLE IF NOT EXISTS calls(id TEXT PRIMARY KEY,variant TEXT,number INTEGER,
@@ -111,11 +112,24 @@ class Ledger:
             conn.execute("BEGIN IMMEDIATE")
             old = conn.execute("SELECT value FROM config WHERE id=1").fetchone()
             if old and old[0] != fingerprint:
-                raise ValueError("Existing ledger plan differs; do not reset/bypass its budget.")
+                previous = json.loads(old[0])
+                ignored = {"variants","first_pass_reserved_usd"}
+                same_contract = {k:v for k,v in previous.items() if k not in ignored} == {k:v for k,v in plan.items() if k not in ignored}
+                prior_variants = previous.get("variants",[])
+                extension = plan.get("variants",[])[len(prior_variants):]
+                permitted_extension = extension == [{"id":"gpt-6-luna-low","model":"gpt-6-luna","effort":"low","cap":32768}]
+                if not allow_extend or not same_contract or plan.get("variants",[])[:len(prior_variants)] != prior_variants or not permitted_extension:
+                    raise ValueError("Existing ledger plan differs; do not reset/bypass its budget.")
+                conn.execute("INSERT INTO amendments(previous,updated) VALUES(?,?)",(old[0],fingerprint))
+                conn.execute("UPDATE config SET value=? WHERE id=1",(fingerprint,))
             conn.execute("INSERT OR IGNORE INTO config VALUES(1,?)",(fingerprint,))
             for variant,number,reserve in tasks:
                 conn.execute("INSERT OR IGNORE INTO tasks(variant,number,reservation) VALUES(?,?,?)",
                              (variant,number,reserve))
+            reserved = conn.execute("SELECT COALESCE(SUM(reservation),0) FROM calls").fetchone()[0]
+            pending = conn.execute("SELECT COALESCE(SUM(reservation),0) FROM tasks WHERE status='pending'").fetchone()[0]
+            if reserved + pending > self.limit:
+                raise ValueError("Additional variant exceeds the existing total ceiling; no request made.")
         self.path.chmod(0o600)
 
     def connect(self):
@@ -177,7 +191,9 @@ class Ledger:
         with self.connect() as conn:
             rows = conn.execute("SELECT variant,reservation,status,record FROM calls ORDER BY rowid").fetchall()
         summary = {}
-        for variant in VARIANTS:
+        with self.connect() as conn:
+            variants = json.loads(conn.execute("SELECT value FROM config WHERE id=1").fetchone()[0])["variants"]
+        for variant in variants:
             selected = [r for r in rows if r[0]==variant["id"]]
             records = [json.loads(r[3]) for r in selected]
             summary[variant["id"]] = {"requests":len(selected),
@@ -248,7 +264,10 @@ def provider(ledger, variant, rates, number, ensure_sources):
     return call
 
 
-def run(video, source, pricing_file, budget=5, live=False):
+def run(video, source, pricing_file, budget=5, live=False, add_luna_low=False):
+    variants = [*VARIANTS]
+    if add_luna_low:
+        variants.append({"id":"gpt-6-luna-low","model":"gpt-6-luna","effort":"low","cap":32768})
     video, source = Path(video).resolve(), Path(source).resolve()
     if source.parent != video.parent or not video.is_file() or not source.is_file():
         raise ValueError("Select an existing video and its explicit same-directory English subtitle.")
@@ -267,12 +286,12 @@ def run(video, source, pricing_file, budget=5, live=False):
     prices = json.loads(Path(pricing_file).read_text())
     prompts = [translator.build_batch_prompt(b,"Persian","natural_conversational","English")+COMPARISON_GUIDANCE for b in batches]
     tasks = [(v["id"],n,maximum(p,v,prices["models"][v["model"]]))
-             for v in VARIANTS for n,p in enumerate(prompts,1)]
+             for v in variants for n,p in enumerate(prompts,1)]
     ceiling = sum(t[2] for t in tasks)/1e9
     if not Decimal(str(budget)).is_finite() or budget <= 0 or ceiling > budget:
         raise ValueError(f"First-pass reserved maximum USD {ceiling:.6f} exceeds approved USD {budget}; no inference made.")
     plan = {"video":str(video),"source":str(source),"source_sha256":source_hash,"video_sha256":video_hash,
-        "cue_count":len(subs),"batch_count":len(batches),"variants":VARIANTS,"budget_usd":budget,
+        "cue_count":len(subs),"batch_count":len(batches),"variants":variants,"budget_usd":budget,
         "first_pass_reserved_usd":ceiling,"prices":prices,"style":"natural_conversational",
         "batch_size":40,"max_chars":12000,"context_cues":2,"context_gap_seconds":15,
         "prompt_hashes":[hashlib.sha256(p.encode()).hexdigest() for p in prompts]}
@@ -282,7 +301,7 @@ def run(video, source, pricing_file, budget=5, live=False):
     directory.chmod(0o700)
     with (directory/"run.lock").open("a") as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        ledger = Ledger(directory/"cost.sqlite",plan,tasks)
+        ledger = Ledger(directory/"cost.sqlite",plan,tasks,allow_extend=add_luna_low)
         (directory/"plan.json").write_text(json.dumps(plan,indent=2))
         print(json.dumps({"run_dir":str(directory),"cues":len(subs),"batches":len(batches),
                           "first_pass_max_usd":ceiling,"operational_max_usd":budget}),flush=True)
@@ -291,11 +310,11 @@ def run(video, source, pricing_file, budget=5, live=False):
         if not settings.openai_api_key:
             raise ValueError("No provider credential configured; no inference made.")
         with translator.get_openai_client() as client:
-            for variant in VARIANTS:
+            for variant in variants:
                 client.models.retrieve(variant["model"])
         existing = {str(p):digest(p) for p in source.parent.iterdir()
                     if p.is_file() and p.suffix.lower() in {".srt",".ass",".ssa",".vtt",".idx",".sub"}
-                    and p.name not in [video.stem+"."+v["id"]+".fa.srt" for v in VARIANTS]}
+                    and p.name not in [video.stem+"."+v["id"]+".fa.srt" for v in variants]}
         def ensure_sources():
             if automation.config()["enabled"]:
                 raise RuntimeError("Unattended automation was enabled unexpectedly.")
@@ -305,7 +324,7 @@ def run(video, source, pricing_file, budget=5, live=False):
         old_call, old_model = translator.call_openai, settings.openai_model
         started = time.monotonic()
         try:
-            for variant in VARIANTS:
+            for variant in variants:
                 output = video.with_name(video.stem+"."+variant["id"]+".fa.srt")
                 if output.exists():
                     outcomes[variant["id"]]={"status":"preserved_existing","path":str(output),
@@ -384,8 +403,9 @@ def main():
     p.add_argument("--pricing-file",required=True)
     p.add_argument("--budget-usd",type=float,default=5)
     p.add_argument("--allow-paid",action="store_true")
+    p.add_argument("--add-luna-low",action="store_true",help="Append explicitly approved Low variant without resetting the existing ledger.")
     args = p.parse_args()
-    run(args.video,args.source,args.pricing_file,args.budget_usd,args.allow_paid)
+    run(args.video,args.source,args.pricing_file,args.budget_usd,args.allow_paid,args.add_luna_low)
 
 
 if __name__=="__main__":
