@@ -239,6 +239,8 @@ Primary references:
 - Radarr webhook fields: https://github.com/Radarr/Radarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookSettings.cs
 - Bazarr variables: https://wiki.bazarr.media/Additional-Configuration/Settings/Subtitles/#custom-post-processing
 
-Final verification: 108 tests passed, 30 pre-existing containers unchanged,
+Final verification: 110 tests passed, 30 pre-existing containers unchanged,
 Sonarr/Radarr notification responses and Bazarr configuration hashes unchanged,
 and all 97 existing Persian sidecar hashes unchanged. No real-library writes.
+
+Persian preservation additionally reuses the manual scanner's sidecar language\nmatching (including .fa.sdh.srt and aliases) and skips media with embedded\nPersian text tracks. This prevents redundant translation without altering\nexisting sidecars or embedded streams. Bitmap Persian tracks are not included\nin this text-track check and require operator review for the pilot.

@@ -399,3 +399,26 @@ def test_blocked_real_file_cannot_starve_allowed_fixture(library, monkeypatch):
     monkeypatch.setattr(settings,"automation_real_library_processing",False)
     assert automation.claim()["id"] == selected["id"]
     assert queued(real_item)["status"] == "queued"
+
+
+def test_persian_sidecar_variant_prevents_duplicate_translation(library, provider):
+    video = media(library)
+    existing = video.with_suffix(".fa.sdh.srt")
+    existing.write_text(ENGLISH.replace("Hello, café!","سلام").replace("How are you?","چطوری؟"))
+    saved = existing.read_bytes()
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    assert queued(item)["status"] == "skipped"
+    assert existing.read_bytes() == saved
+    assert not video.with_suffix(".fa.srt").exists() and not provider
+
+
+def test_embedded_persian_prevents_duplicate_translation(library, provider, monkeypatch):
+    video = media(library)
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    monkeypatch.setattr(automation,"list_text_subtitle_streams",lambda path:[
+        {"index":1,"language":"fas","forced":False,"comment":False,"default":True}])
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    assert queued(item)["status"] == "skipped"
+    assert not video.with_suffix(".fa.srt").exists() and not provider

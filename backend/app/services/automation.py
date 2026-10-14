@@ -11,7 +11,7 @@ from uuid import uuid4
 from app.config import settings
 from app.database import get_connection, create_job, get_job, utc_now
 from app.services.ffmpeg_service import list_text_subtitle_streams, extract_subtitle
-from app.services.media_scanner import VIDEO_EXTENSIONS, sidecar_subtitles, subtitle_language_from_name
+from app.services.media_scanner import VIDEO_EXTENSIONS, sidecar_subtitles, subtitle_language_from_name, translated_output_exists
 from app.services.subtitle_io import read_srt
 from app.services.job_runner import run_translation_job, register_active_job, unregister_active_job, cancel_job
 
@@ -245,7 +245,7 @@ def finish(item, status, message, delay=0, **fields):
                      + " WHERE id=? AND owner=?", [*fields.values(), item["id"], item["owner"]])
 
 
-def select_source(video, item_id):
+def select_source(video, item_id, streams=None):
     """Reuse proven sidecar-first English selection; exclude forced/commentary."""
     candidates = []
     for path in sidecar_subtitles(video.parent, video.stem):
@@ -261,7 +261,7 @@ def select_source(video, item_id):
                 return path
         except RuntimeError:
             logger.warning("English sidecar is incomplete; waiting for another candidate.")
-    streams = [stream for stream in list_text_subtitle_streams(video)
+    streams = [stream for stream in (streams if streams is not None else list_text_subtitle_streams(video))
                if stream["language"] in {"eng", "en"} and not stream["forced"] and not stream["comment"]]
     if not streams:
         return None
@@ -283,17 +283,22 @@ def process(item):
         finish(item, "waiting_media", "Waiting for imported media", WAIT_SECONDS)
         return
     output = path.with_suffix(".fa.srt")
-    if output.exists():
+    existing_output = translated_output_exists(path.parent, path.stem, "Persian")
+    if existing_output:
         # Never replace user subtitles or partial/invalid existing files silently.
-        cues = read_srt(output)
+        cues = read_srt(existing_output)
         if not cues or any(not cue.text.strip() for cue in cues):
             raise RuntimeError("Existing Persian subtitle is incomplete; review it manually.")
-        finish(item, "skipped", "Existing Persian subtitle preserved", output_path=str(output))
+        finish(item, "skipped", "Existing Persian subtitle preserved", output_path=str(existing_output))
         return
     if not os.access(path.parent, os.W_OK):
         finish(item, "waiting_config", "Media directory is read-only", WAIT_SECONDS)
         return
-    source = select_source(path, item["id"])
+    streams = list_text_subtitle_streams(path)
+    if any(stream["language"] in {"fa", "fas", "per"} for stream in streams):
+        finish(item, "skipped", "Existing embedded Persian subtitle preserved")
+        return
+    source = select_source(path, item["id"], streams)
     if source is None:
         finish(item, "waiting_source", "Waiting for English subtitles from Bazarr", WAIT_SECONDS)
         return
