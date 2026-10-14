@@ -190,3 +190,10 @@ file. Automation remains paused. Startup checks model access; agent-run tests
 clear the provider key and use mocks, with no paid inference requests.
 
 Media access update: the user authorized Movies/Shows read/write mounts.\nExisting afshin (1000:1000) permissions were sufficient; no host chmod/chown\nwas needed. Automation roots include fixtures, movies and shows; source\nservice path mappings are configured, but automatic processing remains paused.\nAgent-run translation tests continue to use fixtures and mocked providers.\n
+## Real integration preparation
+
+See ../docs/prime-integration.md and ../docs/persian-quality.md. An internal
+ust-dev-events gateway exposes authenticated import routes on the service
+networks without host ports. No service hooks are enabled. Real-library
+processing remains blocked by AUTOMATION_REAL_LIBRARY_PROCESSING=false and
+the selected-file scope is limited to retained fixtures.

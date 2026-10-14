@@ -374,6 +374,7 @@ def batch_subtitles(
     language: str | None = None,
     max_estimated_tokens: int | None = None,
     context_cues: int = 0,
+    context_gap_seconds: int = 15,
 ):
     batch = []
     char_count = 0
@@ -395,8 +396,23 @@ def batch_subtitles(
         }
 
         if context_cues:
-            item["context_before"] = [clean_subtitle_text(c.text)[:500] for c in source_cues[max(0, position-context_cues):position]]
-            item["context_after"] = [clean_subtitle_text(c.text)[:500] for c in source_cues[position+1:position+1+context_cues]]
+            # Stop at scene-sized gaps; do not borrow unrelated dialogue.
+            before = []
+            previous_start = sub.start.ordinal
+            for cue in reversed(source_cues[max(0, position-context_cues):position]):
+                if previous_start - cue.end.ordinal > context_gap_seconds * 1000:
+                    break
+                before.insert(0, clean_subtitle_text(cue.text)[:500])
+                previous_start = cue.start.ordinal
+            after = []
+            previous_end = sub.end.ordinal
+            for cue in source_cues[position+1:position+1+context_cues]:
+                if cue.start.ordinal - previous_end > context_gap_seconds * 1000:
+                    break
+                after.append(clean_subtitle_text(cue.text)[:500])
+                previous_end = cue.end.ordinal
+            item["context_before"] = before
+            item["context_after"] = after
 
         context_text = " ".join(item.get("context_before", []) + item.get("context_after", []))
         estimated_chars = len(text) + len(context_text)

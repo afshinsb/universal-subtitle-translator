@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "language": "Iranian Persian",
+  "source": "Original synthetic dialogue.",
+  "cases": [
+    {
+      "id": "idiom",
+      "category": "idiom",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "You look nervous."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "I have butterflies in my stomach."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "You'll do great."
+        }
+      ],
+      "review_reference": "دلشوره دارم",
+      "review_notes": "Do not translate literal butterflies."
+    },
+    {
+      "id": "sarcasm",
+      "category": "sarcasm",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "The roof is leaking again."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "Great. Just what we needed."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "I'll get a bucket."
+        }
+      ],
+      "review_reference": "فقط همینو کم داشتیم",
+      "review_notes": "Preserve frustrated sarcasm."
+    },
+    {
+      "id": "slang",
+      "category": "slang",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "You haven't slept, have you?"
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "I'm totally wiped."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Then crash on the couch."
+        }
+      ],
+      "review_reference": "داغونم",
+      "review_notes": "Exhaustion and informal invitation."
+    },
+    {
+      "id": "humor",
+      "category": "humor",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "Did you hear my joke about construction?"
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "I'm still working on it."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Yeah, that explains the delay."
+        }
+      ],
+      "review_reference": "هنوز دارم روش کار می‌کنم",
+      "review_notes": "Keep joke without explaining it."
+    },
+    {
+      "id": "emotion",
+      "category": "emotion",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "I thought you'd left for good."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "I couldn't just walk away from you."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Don't promise what you can't keep."
+        }
+      ],
+      "review_reference": "نمی‌تونستم ولت کنم و برم",
+      "review_notes": "Vulnerable restrained dialogue."
+    },
+    {
+      "id": "pronoun",
+      "category": "pronoun",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "Sara handed Mina the keys."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "She said she'd be back by midnight."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Mina waited by the door."
+        }
+      ],
+      "review_reference": "گفت تا نصفه‌شب برمی‌گرده",
+      "review_notes": "Do not invent gender or identity."
+    },
+    {
+      "id": "context",
+      "category": "context",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "The secret is already out."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "Well, the cat's out of the bag."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "So we might as well tell them."
+        }
+      ],
+      "review_reference": "دیگه راز لو رفته",
+      "review_notes": "No literal cats or bags."
+    },
+    {
+      "id": "politeness",
+      "category": "politeness",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "Could you please lower your voice?"
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "Would you mind giving us a minute?"
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Of course. I'll wait outside."
+        }
+      ],
+      "review_reference": "یه دقیقه تنهامون بذارین",
+      "review_notes": "Polite without bureaucratic phrasing."
+    },
+    {
+      "id": "threat",
+      "category": "threat",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "Keep your hands where I can see them."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "Don't push your luck."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "I'm not looking for trouble."
+        }
+      ],
+      "review_reference": "زیادی شانستو امتحان نکن",
+      "review_notes": "Tense warning."
+    },
+    {
+      "id": "relationship",
+      "category": "relationship",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "You never listen to me."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "I'm listening now. Talk to me."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "It shouldn't have taken this long."
+        }
+      ],
+      "review_reference": "الان دارم گوش می‌دم. بهم بگو",
+      "review_notes": "Personal, not clinical."
+    },
+    {
+      "id": "swearing",
+      "category": "swearing",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "You sold us out."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "That's bullshit, and you know it."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "Then explain the money."
+        }
+      ],
+      "review_reference": "مزخرفه، خودتم می‌دونی",
+      "review_notes": "Do not censor or intensify."
+    },
+    {
+      "id": "wordplay",
+      "category": "wordplay",
+      "cues": [
+        {
+          "id": 7,
+          "start_ms": 2125,
+          "end_ms": 3250,
+          "text": "You're a real piece of work."
+        },
+        {
+          "id": 12,
+          "start_ms": 4325,
+          "end_ms": 5450,
+          "text": "Thanks. I put a lot of work into this."
+        },
+        {
+          "id": 20,
+          "start_ms": 6525,
+          "end_ms": 7650,
+          "text": "That wasn't a compliment."
+        }
+      ],
+      "review_reference": "تو هم عجب آدمی هستی",
+      "review_notes": "Insult mistaken for literal work."
+    }
+  ]
+}

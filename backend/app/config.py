@@ -122,6 +122,9 @@ class Settings:
         else None
     )
 
+    automation_real_library_processing: bool = parse_bool_env("AUTOMATION_REAL_LIBRARY_PROCESSING", False)
+    automation_context_gap_seconds: int = parse_int_env("AUTOMATION_CONTEXT_GAP_SECONDS", 15)
+
     automation_allow_library_writes: bool = parse_bool_env("AUTOMATION_ALLOW_LIBRARY_WRITES", False)
 
     default_source_language: str = env_value("DEFAULT_SOURCE_LANGUAGE", "Auto") or "Auto"

@@ -1,0 +1,28 @@
+{
+  "verified_date": "2026-10-14",
+  "currency": "USD",
+  "unit": "per million standard text tokens",
+  "models": {
+    "gpt-4o-mini": {
+      "input": 0.15,
+      "output": 0.6,
+      "reasoning": false,
+      "lifecycle": "Official page marked deprecated; existing baseline.",
+      "source": "https://developers.openai.com/api/docs/models/gpt-4o-mini"
+    },
+    "gpt-5.4-mini": {
+      "input": 0.75,
+      "output": 4.5,
+      "reasoning": true,
+      "reasoning_effort": "none",
+      "source": "https://developers.openai.com/api/docs/models/gpt-5.4-mini"
+    },
+    "gpt-5.6-terra": {
+      "input": 2,
+      "output": 12,
+      "reasoning": true,
+      "reasoning_effort": "none",
+      "source": "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+    }
+  }
+}

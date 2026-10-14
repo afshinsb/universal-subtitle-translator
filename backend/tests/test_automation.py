@@ -316,3 +316,86 @@ def test_explicit_library_write_opt_in(library, monkeypatch):
     cfg = automation.save_config(False, [str(real)], {"/movies":str(real)})
     assert not cfg["enabled"]
     assert automation.map_path("/movies/Film.mkv") == real / "Film.mkv"
+
+
+def test_selected_file_scope_does_not_claim_other_pending_imports(library):
+    first = media(library, "First")
+    selected = media(library, "Selected")
+    other = automation.enqueue(str(first))
+    chosen = automation.enqueue(str(selected))
+    automation.save_scope([str(selected)])
+    assert automation.reconcile() == 1
+    assert automation.claim()["id"] == chosen["id"]
+    assert queued(other)["status"] == "queued"
+    automation.save_scope([])
+    assert automation.claim() is None
+
+
+def test_real_processing_gate_is_independent_of_write_permission(library, monkeypatch):
+    monkeypatch.setattr(settings, "media_root", library.parent)
+    monkeypatch.setattr(settings, "automation_allow_library_writes", True)
+    monkeypatch.setattr(settings, "automation_real_library_processing", False)
+    real = library.parent / "movies"
+    real.mkdir()
+    video = media(real)
+    automation.save_config(True, [str(real)], {})
+    assert not automation.permitted_file(video)
+    with pytest.raises(ValueError, match="disabled"):
+        automation.enqueue(str(video))
+    monkeypatch.setattr(settings, "automation_real_library_processing", True)
+    assert automation.permitted_file(video)
+
+
+def test_pause_prevents_publication_of_inflight_response(library, provider, monkeypatch):
+    video = media(library)
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    item = automation.enqueue(str(video))
+    original = translator.call_openai
+    def pause_during_reply(prompt):
+        result = original(prompt)
+        automation.pause()
+        return result
+    monkeypatch.setattr(translator, "call_openai", pause_during_reply)
+    automation.process_one()
+    assert not automation.config()["enabled"]
+    assert not video.with_suffix(".fa.srt").exists()
+    assert queued(item)["status"] != "done"
+
+
+def test_context_stops_at_scene_gaps():
+    import pysrt
+    from app.services.subtitle_io import batch_subtitles
+    cues = pysrt.SubRipFile([
+        pysrt.SubRipItem(7,start=pysrt.SubRipTime(seconds=1),end=pysrt.SubRipTime(seconds=2),text="Old scene"),
+        pysrt.SubRipItem(12,start=pysrt.SubRipTime(seconds=90),end=pysrt.SubRipTime(seconds=91),text="New scene"),
+        pysrt.SubRipItem(20,start=pysrt.SubRipTime(seconds=92),end=pysrt.SubRipTime(seconds=93),text="Same scene")])
+    batch = list(batch_subtitles(cues,10,12000,context_cues=2))[0]
+    assert batch[1]["context_before"] == []
+    assert batch[1]["context_after"] == ["Same scene"]
+    assert batch[2]["context_before"] == ["New scene"]
+
+
+def test_scope_limit_and_pause_http(api, library):
+    assert api.post("/automation/scope", data={"allowed_files":""}).status_code == 200
+    assert automation.claim() is None
+    assert api.post("/automation/pause").json()["paused"]
+    assert not automation.config()["enabled"]
+    with pytest.raises(ValueError, match="50"):
+        automation.save_scope([str(library/"film.mkv")]*51)
+
+
+def test_blocked_real_file_cannot_starve_allowed_fixture(library, monkeypatch):
+    monkeypatch.setattr(settings, "media_root", library.parent)
+    monkeypatch.setattr(settings, "automation_allow_library_writes", True)
+    monkeypatch.setattr(settings, "automation_real_library_processing", True)
+    real = library.parent/"movies"
+    real.mkdir()
+    actual = media(real,"Real")
+    fixture = media(library,"Fixture")
+    automation.save_config(True,[str(real),str(library)],{})
+    real_item = automation.enqueue(str(actual))
+    selected = automation.enqueue(str(fixture))
+    automation.save_scope([str(actual),str(fixture)])
+    monkeypatch.setattr(settings,"automation_real_library_processing",False)
+    assert automation.claim()["id"] == selected["id"]
+    assert queued(real_item)["status"] == "queued"

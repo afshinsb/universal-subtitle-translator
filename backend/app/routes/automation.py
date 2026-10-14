@@ -28,6 +28,7 @@ def dashboard(request: Request):
         "config": cfg, "queue": automation.list_queue(), "counts": automation.counts(),
         "provider_ready": bool(automation.settings.openai_api_key),
         "roots_text": "\n".join(cfg["roots"]),
+        "allowed_files_text": "\n".join(cfg.get("allowed_files", [])),
         "mappings_text": json.dumps(cfg["path_mappings"], indent=2),
     })
 
@@ -35,7 +36,7 @@ def dashboard(request: Request):
 @router.get("/status")
 def status():
     cfg = automation.config()
-    return {"enabled": cfg["enabled"], "roots": cfg["roots"], "counts": automation.counts(),
+    return {"enabled": cfg["enabled"], "roots": cfg["roots"], "scope_mode": cfg.get("scope_mode", "libraries"), "allowed_files": cfg.get("allowed_files", []), "counts": automation.counts(),
             "provider_ready": bool(automation.settings.openai_api_key), "queue": automation.list_queue()}
 
 
@@ -47,6 +48,25 @@ def update_settings(request: Request, enabled: bool = Form(False),
         automation.save_config(enabled, [line.strip() for line in roots.splitlines() if line.strip()],
                                json.loads(path_mappings))
     except (ValueError, TypeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return RedirectResponse("/automation", status_code=303)
+
+
+@router.post("/pause")
+def pause(request: Request):
+    check_origin(request)
+    cancelled = automation.pause()
+    if "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse("/automation", status_code=303)
+    return {"paused": True, "cancel_requested": cancelled}
+
+
+@router.post("/scope")
+def scope(request: Request, allowed_files: str = Form("")):
+    check_origin(request)
+    try:
+        automation.save_scope([line.strip() for line in allowed_files.splitlines() if line.strip()])
+    except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return RedirectResponse("/automation", status_code=303)
 
@@ -117,7 +137,10 @@ async def webhook(service: str, request: Request):
         mapped = [automation.map_path(path) for path in paths]
         if any(path.suffix.lower() not in automation.VIDEO_EXTENSIONS for path in mapped):
             raise ValueError("Event paths must identify supported video files.")
-        items = [automation.enqueue(str(path), service) for path in mapped]
+        selected = [path for path in mapped if automation.permitted_file(path)]
+        if not selected:
+            return {"status": "ignored", "reason": "Outside selected processing scope or real processing disabled."}
+        items = [automation.enqueue(str(path), service) for path in selected]
     except (ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(422, str(exc)) from exc
     return {"status": "accepted", "queue_ids": [item["id"] for item in items]}

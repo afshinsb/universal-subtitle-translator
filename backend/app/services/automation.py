@@ -13,7 +13,7 @@ from app.database import get_connection, create_job, get_job, utc_now
 from app.services.ffmpeg_service import list_text_subtitle_streams, extract_subtitle
 from app.services.media_scanner import VIDEO_EXTENSIONS, sidecar_subtitles, subtitle_language_from_name
 from app.services.subtitle_io import read_srt
-from app.services.job_runner import run_translation_job, register_active_job, unregister_active_job
+from app.services.job_runner import run_translation_job, register_active_job, unregister_active_job, cancel_job
 
 logger = logging.getLogger(__name__)
 LEASE_SECONDS = 90
@@ -43,6 +43,43 @@ def init_schema():
 def config():
     with get_connection() as conn:
         return json.loads(conn.execute("SELECT value FROM automation_config WHERE id=1").fetchone()[0])
+
+
+def permitted_file(path, cfg=None):
+    cfg = cfg or config()
+    resolved = Path(path).resolve()
+    if cfg.get("scope_mode", "libraries") == "selected_files":
+        if str(resolved) not in cfg.get("allowed_files", []):
+            return False
+    if settings.media_root and not settings.automation_real_library_processing:
+        fixtures = (settings.media_root / "fixtures").resolve()
+        if resolved != fixtures and fixtures not in resolved.parents:
+            return False
+    return True
+
+
+def save_scope(paths):
+    cfg = config()
+    if len(paths) > 50:
+        raise ValueError("Selected-file scope is limited to 50 videos.")
+    checked = [str(checked_path(value, cfg)) for value in paths]
+    if any(Path(value).suffix.lower() not in VIDEO_EXTENSIONS for value in checked):
+        raise ValueError("Scope must list exact supported video file paths.")
+    cfg.update(scope_mode="selected_files", allowed_files=sorted(set(checked)))
+    with get_connection() as conn:
+        conn.execute("UPDATE automation_config SET value=? WHERE id=1", (json.dumps(cfg),))
+    return cfg
+
+
+def pause():
+    cfg = config()
+    cfg["enabled"] = False
+    with get_connection() as conn:
+        conn.execute("UPDATE automation_config SET value=? WHERE id=1", (json.dumps(cfg),))
+        active = conn.execute("SELECT job_id FROM automation_queue WHERE status='running' AND job_id IS NOT NULL").fetchall()
+    for row in active:
+        cancel_job(row["job_id"])
+    return len(active)
 
 
 def checked_path(value, cfg=None):
@@ -115,6 +152,8 @@ def signature(path):
 
 def enqueue(value, origin="scan"):
     path = checked_path(value)
+    if not permitted_file(path):
+        raise ValueError("This video is outside the selected scope or real-library processing is disabled.")
     if path.suffix.lower() not in VIDEO_EXTENSIONS:
         raise ValueError("Event path must identify a supported video file.")
     now = utc_now()
@@ -164,15 +203,33 @@ def retry(item_id):
 
 def claim(item_id=None):
     now = time.time()
+    cfg = config()
+    allowed = cfg.get("allowed_files", []) if cfg.get("scope_mode") == "selected_files" else None
+    if allowed is not None:
+        allowed = [value for value in allowed if permitted_file(value, cfg)]
+    if allowed is not None and not allowed:
+        return None
+    scope_sql = ""
+    scope_args = []
+    if allowed is not None:
+        scope_sql = " AND video_path IN (" + ",".join("?" for _ in allowed) + ")"
+        scope_args = allowed
+    elif settings.media_root and not settings.automation_real_library_processing:
+        scope_sql = " AND video_path LIKE ? ESCAPE '!'"
+        prefix = str((settings.media_root / "fixtures").resolve()) + "/"
+        scope_args = [prefix.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"]
     with get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("""UPDATE automation_queue SET status='queued',owner=NULL,
             message='Recovered expired worker lease' WHERE status='running' AND lease_until<?""", (now,))
         row = conn.execute("""SELECT * FROM automation_queue
             WHERE status IN ('queued','retry','waiting_media','waiting_source','waiting_config')
-            AND next_run<=? AND (? IS NULL OR id=?) ORDER BY next_run,created_at LIMIT 1""",
-            (now, item_id, item_id)).fetchone()
+            AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY next_run,created_at LIMIT 1",
+            [now, item_id, item_id, *scope_args]).fetchone()
         if not row:
+            return None
+        if not permitted_file(row["video_path"]):
+            # Excluded rows remain pending, without claiming or exhausting retries.
             return None
         owner = uuid4().hex
         conn.execute("""UPDATE automation_queue SET status='running',owner=?,lease_until=?,
@@ -219,6 +276,9 @@ def select_source(video, item_id):
 
 def process(item):
     path = checked_path(item["video_path"])
+    if not permitted_file(path):
+        finish(item, "waiting_config", "Outside the permitted processing scope", WAIT_SECONDS)
+        return
     if not path.is_file():
         finish(item, "waiting_media", "Waiting for imported media", WAIT_SECONDS)
         return
@@ -248,6 +308,8 @@ def process(item):
     create_job(job_id, source.name, str(source), "Persian", "English",
                "natural_conversational", settings.openai_model)
     def before_publish():
+        if not config()["enabled"] or not permitted_file(path):
+            raise RuntimeError("Automation paused or processing scope changed.")
         checked_path(str(path))
         with get_connection() as conn:
             owned = conn.execute("SELECT owner,lease_until FROM automation_queue WHERE id=?",
@@ -258,7 +320,7 @@ def process(item):
     register_active_job(job_id)
     try:
         run_translation_job(job_id, str(source), source.name, "Persian", "natural_conversational",
-                            output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish)
+                            output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish)
     finally:
         unregister_active_job(job_id)
     job = get_job(job_id)
@@ -301,13 +363,20 @@ def process_one(item_id=None):
 def reconcile():
     """Recover missed imports/events and delayed subtitles without modifying services."""
     found = 0
-    for root in config()["roots"]:
+    cfg = config()
+    if cfg.get("scope_mode") == "selected_files":
+        for value in cfg.get("allowed_files", []):
+            if permitted_file(value, cfg):
+                enqueue(value, "reconciliation")
+                found += 1
+        return found
+    for root in cfg["roots"]:
         checked_path(root)
         for directory, dirs, names in os.walk(root, followlinks=False):
             dirs[:] = sorted(d for d in dirs if not (Path(directory) / d).is_symlink())
             for name in sorted(names):
                 path = Path(directory) / name
-                if path.suffix.lower() in VIDEO_EXTENSIONS and not path.is_symlink():
+                if path.suffix.lower() in VIDEO_EXTENSIONS and not path.is_symlink() and permitted_file(path, cfg):
                     enqueue(str(path), "reconciliation")
                     found += 1
     return found

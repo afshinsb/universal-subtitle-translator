@@ -15,7 +15,10 @@ change firewall/network settings, or prune Docker. Keep builds sequential.
 
 Development names: ust-dev-backend and ust-dev-frontend.
 Only published development port: 127.0.0.1:2289.
-Backend uses UID/GID 1000:1000. The user authorized read/write Movies and\nShows mounts. Existing host permissions are sufficient; do not broaden them.\nAUTOMATION_ALLOW_LIBRARY_WRITES=true permits configured library roots,\nbut agent-run translation tests must still use fixtures and mocked providers.
+Backend uses UID/GID 1000:1000. The user authorized read/write Movies and
+Shows mounts. Existing host permissions are sufficient; do not broaden them.
+AUTOMATION_ALLOW_LIBRARY_WRITES=true permits configured library roots,
+but agent-run translation tests must still use fixtures and mocked providers.
 Use generated writable fixtures and mocked providers for agent-run tests.
 A development API key may be configured. Never display it or make paid AI
 requests without approval. Keep automation paused unless explicitly authorized.
@@ -24,3 +27,8 @@ dev/.env and dev/runtime are private and ignored. Never commit or print them.
 Python source reloads automatically; templates/static assets refresh.
 Recreate for environment/mount changes, rebuild for dependencies/Dockerfiles.
 See dev/README.md for access, operations, tests, and rollback.
+
+Integration preparation: ust-dev-events may join existing service networks as
+an internal gateway with no published ports. Do not change service hooks or
+attach/recreate existing services. Real-library processing is disabled by
+AUTOMATION_REAL_LIBRARY_PROCESSING=false; preserve that gate until approval.

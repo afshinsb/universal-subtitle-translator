@@ -730,12 +730,18 @@ def run_translation_job(
     batch_id: str | None = None,
     preserve_cue_ids: bool = False,
     before_publish=None,
+    check_automation=None,
 ) -> None:
+    def check_job():
+        if check_automation:
+            check_automation()
+        check_cancelled(job_id=job_id, batch_id=batch_id)
+
     job_started_at = time.monotonic()
     claimed_output = None
 
     try:
-        check_cancelled(job_id=job_id, batch_id=batch_id)
+        check_job()
         path = Path(input_path)
         output_filename = make_output_filename(input_filename, target_language)
         if output_path_override:
@@ -775,7 +781,7 @@ def run_translation_job(
         )
 
         path = Path(input_path)
-        check_cancelled(job_id=job_id, batch_id=batch_id)
+        check_job()
         subs = read_srt(path)
         srt_index_to_list_pos = build_srt_index_to_list_pos(subs)
         detected_source_language = detect_subtitle_language(subs, input_filename)
@@ -808,6 +814,7 @@ def run_translation_job(
                 max_chars=settings.srt_max_chars,
                 language=detected_source_language,
                 context_cues=2 if target_language == "Persian" else 0,
+                context_gap_seconds=settings.automation_context_gap_seconds,
             )
         )
 
@@ -825,7 +832,7 @@ def run_translation_job(
         translated_count = 0
 
         for batch_number, batch in enumerate(batches, start=1):
-            check_cancelled(job_id=job_id, batch_id=batch_id)
+            check_job()
 
             update_job(
                 job_id,
@@ -840,10 +847,10 @@ def run_translation_job(
                 style=style,
                 batch_number=batch_number,
                 batch_count=len(batches),
-                cancel_check=lambda: check_cancelled(job_id=job_id, batch_id=batch_id),
+                cancel_check=lambda: check_job(),
             )
 
-            check_cancelled(job_id=job_id, batch_id=batch_id)
+            check_job()
 
             for item in batch:
                 srt_index = item["index"]
@@ -896,7 +903,7 @@ def run_translation_job(
             )
 
         update_job(job_id, message="Validating translated subtitle...")
-        check_cancelled(job_id=job_id, batch_id=batch_id)
+        check_job()
 
         validation = validate_subtitles(subs, target_language)
 
@@ -922,7 +929,7 @@ def run_translation_job(
         if output_path.exists() and not overwrite_existing:
             raise RuntimeError(f"Output already exists: {output_path}")
 
-        check_cancelled(job_id=job_id, batch_id=batch_id)
+        check_job()
         update_job(job_id, message="Saving translated subtitle...")
 
         if before_publish:

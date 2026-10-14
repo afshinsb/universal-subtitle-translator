@@ -28,6 +28,7 @@ services:
       MEDIA_ROOT: /media
       # Explicitly authorized real-library access; processing remains paused.
       AUTOMATION_ALLOW_LIBRARY_WRITES: "true"
+      AUTOMATION_REAL_LIBRARY_PROCESSING: "false"
     volumes:
       - ../backend/app:/app/app:ro
       - ../scripts:/smoke:ro
@@ -85,6 +86,35 @@ services:
     logging:
       driver: json-file
       options: {max-size: "10m", max-file: "2"}
+  events:
+    image: ust-dev-frontend:1.8.2-5568f9e
+    container_name: ust-dev-events
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    volumes:
+      - ./events-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend: {condition: service_healthy}
+    networks:
+      default: {}
+      sonarr: {aliases: [ust-events]}
+      radarr: {aliases: [ust-events]}
+      bazarr: {aliases: [ust-events]}
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 64
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
 networks:
+  sonarr: {external: true, name: sonarr_default}
+  radarr: {external: true, name: radarr_default}
+  bazarr: {external: true, name: bazarr_default}
   default:
     name: ust-dev_default
