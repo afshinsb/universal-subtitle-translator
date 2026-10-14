@@ -28,6 +28,9 @@ def init_schema():
             offset INTEGER DEFAULT 0)''')
         conn.execute('INSERT OR IGNORE INTO download_guard_config(id,enabled,auto_remove) VALUES(1,?,0)',
                      (settings.download_guard_enabled,))
+        conn.execute('CREATE TABLE IF NOT EXISTS download_guard_cursor(category TEXT PRIMARY KEY,offset INTEGER DEFAULT 0)')
+        for category in CATEGORIES:
+            conn.execute('INSERT OR IGNORE INTO download_guard_cursor(category) VALUES(?)',(category,))
         conn.execute('''CREATE TABLE IF NOT EXISTS download_guard_seen (
             hash TEXT PRIMARY KEY, signature TEXT, first_seen REAL, deleted INTEGER DEFAULT 0)''')
         conn.execute('''CREATE TABLE IF NOT EXISTS download_guard_activity (
@@ -38,7 +41,7 @@ def init_schema():
 def configure(enabled, auto_remove):
     with get_connection() as conn:
         old = conn.execute('SELECT * FROM download_guard_config WHERE id=1').fetchone()
-        if auto_remove and not old['last_scan']:
+        if auto_remove and (not old['last_scan'] or old['last_error']):
             raise ValueError('Complete a dry-run scan before enabling automatic removal.')
         conn.execute('UPDATE download_guard_config SET enabled=?,auto_remove=? WHERE id=1', (enabled,auto_remove))
 
@@ -189,11 +192,11 @@ def scan():
     error=''
     try:
         # Max 20 file lists/category each scan; persistent rotating offset.
-        next_offset=cfg['offset']+20
         for category in CATEGORIES:
-            torrents=media_intake.api('qbit','api/v2/torrents/info?'+urllib.parse.urlencode({'category':category,'limit':20,'offset':cfg['offset'],'sort':'hash'}))
-            if len(torrents)<20:
-                next_offset=0
+            with get_connection() as conn:
+                offset=conn.execute('SELECT offset FROM download_guard_cursor WHERE category=?',(category,)).fetchone()[0]
+            torrents=media_intake.api('qbit','api/v2/torrents/info?'+urllib.parse.urlencode({'category':category,'limit':20,'offset':offset,'sort':'hash'}))
+            next_offset=offset+20 if len(torrents)==20 else 0
             for torrent in torrents:
                 try:
                     with get_connection() as conn:
@@ -201,8 +204,9 @@ def scan():
                     inspect(torrent,bool(cfg['auto_remove']),owner)
                 except Exception as exc:
                     activity(torrent,'failed',type(exc).__name__+': '+str(exc))
+            with get_connection() as conn:
+                conn.execute('UPDATE download_guard_cursor SET offset=? WHERE category=?',(next_offset,category))
         with get_connection() as conn:
-            conn.execute('UPDATE download_guard_config SET offset=? WHERE id=1 AND owner=?',(next_offset,owner))
             conn.execute('DELETE FROM download_guard_seen WHERE first_seen<? AND deleted=0',(time.time()-30*86400,))
     except Exception as exc:
         error=type(exc).__name__+': '+str(exc)

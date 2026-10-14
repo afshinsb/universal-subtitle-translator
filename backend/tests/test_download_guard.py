@@ -157,3 +157,19 @@ def test_qbit_login_accepts_current_and_legacy_api(monkeypatch,status,body):
     monkeypatch.setattr(media_intake,'_qbit_client',None)
     monkeypatch.setattr(media_intake.urllib.request,'build_opener',lambda *a: Opener())
     assert media_intake.qbit_request('api/v2/torrents/info?limit=1')==[]
+
+
+def test_categories_have_independent_bounded_scan_cursors(example,monkeypatch):
+    import urllib.parse
+    guard.configure(True,False)
+    offsets=[]
+    def api(service,route):
+        args=urllib.parse.parse_qs(urllib.parse.urlsplit(route).query)
+        category=args['category'][0]
+        offsets.append((category,int(args['offset'][0])))
+        return [{'category':category}]*20 if category=='tv-sonarr' else []
+    monkeypatch.setattr(media_intake,'api',api)
+    monkeypatch.setattr(guard,'inspect',lambda *a: None)
+    guard.scan()
+    guard.scan()
+    assert offsets==[('tv-sonarr',0),('radarr',0),('tv-sonarr',20),('radarr',0)]
