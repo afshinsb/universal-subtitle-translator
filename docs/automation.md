@@ -54,8 +54,9 @@ watermark behavior, styles and routes.
 
 Development paths are additionally constrained to /media/fixtures regardless
 of UI configuration; /media/movies and /media/shows cannot be automation roots.
-No AI key is set. Normal processing stops at waiting_config before any provider
-request. A mocked provider exists only within verification processes.
+When no key is configured, normal processing stops at waiting_config before
+any provider request. The development key is now configured, but automation
+remains paused. A mocked provider exists only within verification processes.
 
 ## Event adapters
 
@@ -135,10 +136,10 @@ Existing manual upload/download and subtitle tests remain in the full suite.
 Retained live demonstration:
 
 ~~~sh
-docker exec -i ust-dev-backend python - prepare < dev/verify_automation.py
+docker exec -e OPENAI_API_KEY= -i ust-dev-backend python - prepare < dev/verify_automation.py
 ./dev/ust restart backend
 ./dev/ust up -d --wait
-docker exec -i ust-dev-backend python - complete < dev/verify_automation.py
+docker exec -e OPENAI_API_KEY= -i ust-dev-backend python - complete < dev/verify_automation.py
 ~~~
 
 Run with automation paused. The script generates a new writable fixture
@@ -176,3 +177,8 @@ Large-library scan performance requires controlled measurement before enabling.
 Rollback: pause Automation first, revert the feature commit, then let hot reload
 restart the app. Added SQLite tables can remain; manual data is unaffected.
 Production stays unchanged on port 2288.
+
+Provider configuration update: dev/compose.yml now honors the key and upload
+limits in dev/.env. Model, style and SRT batch settings also come from that
+file. Automation remains paused. Startup checks model access; agent-run tests
+clear the provider key and use mocks, with no paid inference requests.

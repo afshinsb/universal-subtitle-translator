@@ -16,7 +16,9 @@ change firewall/network settings, or prune Docker. Keep builds sequential.
 Development names: ust-dev-backend and ust-dev-frontend.
 Only published development port: 127.0.0.1:2289.
 Backend uses UID/GID 1000:1000. Real libraries are read-only.
-Use generated writable fixtures and mocked providers; no real AI key is set.
+Use generated writable fixtures and mocked providers for agent-run tests.
+A development API key may be configured. Never display it or make paid AI
+requests without approval. Keep automation paused unless explicitly authorized.
 dev/.env and dev/runtime are private and ignored. Never commit or print them.
 
 Python source reloads automatically; templates/static assets refresh.

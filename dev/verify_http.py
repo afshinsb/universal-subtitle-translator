@@ -30,6 +30,7 @@ assert any(cookie.name == "ust_session" for cookie in cookies)
 assert client.open(base + "/", timeout=10).status == 200
 assert client.open(base + "/automation", timeout=10).status == 200
 automation = json.load(client.open(base + "/automation/status", timeout=10))
-assert not automation["enabled"] and not automation["provider_ready"]
+assert not automation["enabled"]
+assert automation["provider_ready"] == bool(env.get("OPENAI_API_KEY", "").strip())
 assert "webhook_token" not in automation
 print(json.dumps({"automation_page":200, "automation_counts":automation["counts"], "health":health,"unauthenticated":401,"wrong_password":401,"authenticated_page":200,"session_cookie":True}))

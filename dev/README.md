@@ -86,7 +86,8 @@ separate subdirectories there. MEDIA_ROOT=/media restricts batch paths.
 No production data or secrets are mounted. For generated tests use
 /media/fixtures; real scanning uses /media/movies or /media/shows.
 
-No AI key is configured, so ordinary UI translation is blocked.
+The development provider key and model are read from dev/.env.
+Automation remains paused; paid translation requires approval.
 Fixture scripts mock the provider only within their own process.
 The v1.8.2 scanner supports output/temp fallback for unwritable media.
 Real media was inspected without translation or writes. A movie had three
@@ -124,8 +125,8 @@ Targeted checks:
 
 ~~~sh
 python3 dev/verify_http.py
-docker exec -i ust-dev-backend python < dev/verify_backend.py
-docker exec -i ust-dev-backend python < dev/verify_persian.py
+docker exec -e OPENAI_API_KEY= -i ust-dev-backend python < dev/verify_backend.py
+docker exec -e OPENAI_API_KEY= -i ust-dev-backend python < dev/verify_persian.py
 python3 dev/verify_services.py
 python3 dev/verify_reload.py
 ~~~
@@ -182,3 +183,8 @@ If explicitly wanted later: cd into this checkout and run ~/.local/bin/codex.
 See ../docs/automation.md. The Automation page is /automation. Processing
 remains paused, fixture-only, and provider-free until explicitly configured.
 Future work, commits and pushes use main directly.
+
+Provider configuration update: dev/compose.yml now honors the key and upload
+limits in dev/.env. Model, style and SRT batch settings also come from that
+file. Automation remains paused. Startup checks model access; agent-run tests
+clear the provider key and use mocks, with no paid inference requests.

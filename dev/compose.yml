@@ -16,10 +16,10 @@ services:
       DEMO_MODE: "false"
       AUTH_ENABLED: "true"
       SESSION_HTTPS_ONLY: "false"
-      OPENAI_API_KEY: ""
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       PYTHON_DOTENV_DISABLED: "1"
       BATCH_FILE_CONCURRENCY: "1"
-      MAX_UPLOAD_MB: "1024"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-1024}"
       DATA_DIR: /app/data
       UPLOAD_DIR: /app/data/uploads
       OUTPUT_DIR: /app/data/outputs
@@ -63,7 +63,7 @@ services:
     container_name: ust-dev-frontend
     environment:
       BACKEND_PORT: "2288"
-      NGINX_CLIENT_MAX_BODY_SIZE: 1G
+      NGINX_CLIENT_MAX_BODY_SIZE: "${NGINX_CLIENT_MAX_BODY_SIZE:-1G}"
     volumes:
       - ../frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
