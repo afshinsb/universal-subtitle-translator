@@ -13,6 +13,8 @@ from app.config import auth_config_checks, settings, ensure_directories, run_ope
 from app.database import init_db
 from app.routes import auth, jobs, files, settings as settings_routes, logs, batches, cleanup as cleanup_routes
 from app.services.job_runner import repair_stale_work, request_shutdown
+from app.services import automation
+from app.routes import automation as automation_routes
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +27,13 @@ async def lifespan(app):
         logger.warning("Configuration warning: %s", warning)
     init_db()
     repair_stale_work(reason="backend startup")
+    automation.init_schema()
+    automation.worker.start()
     try:
         yield
     finally:
         request_shutdown()
+        automation.worker.stop()
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
@@ -47,7 +52,7 @@ def wants_html(request: Request) -> bool:
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
 
-    if path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES):
+    if path.startswith("/automation/hooks/") or path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES):
         return await call_next(request)
 
     # A cookie signed with the shipped development secret is forgeable. Apply
@@ -118,6 +123,7 @@ app.include_router(settings_routes.router)
 app.include_router(logs.router)
 app.include_router(batches.router)
 app.include_router(cleanup_routes.router)
+app.include_router(automation_routes.router)
 
 
 @app.get("/health")

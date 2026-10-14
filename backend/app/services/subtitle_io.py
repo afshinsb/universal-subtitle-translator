@@ -146,10 +146,10 @@ def with_credit_watermarks(subs):
     return watermarked
 
 
-def write_srt(subs, path: Path, *, overwrite: bool = True) -> None:
+def write_srt(subs, path: Path, *, overwrite: bool = True, add_credit: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    output_subs = with_credit_watermarks(subs)
+    output_subs = with_credit_watermarks(subs) if add_credit else subs
 
     try:
         output_subs.save(str(temp_path), encoding="utf-8")
@@ -373,6 +373,7 @@ def batch_subtitles(
     max_chars: int,
     language: str | None = None,
     max_estimated_tokens: int | None = None,
+    context_cues: int = 0,
 ):
     batch = []
     char_count = 0
@@ -381,7 +382,8 @@ def batch_subtitles(
     if max_estimated_tokens is None:
         max_estimated_tokens = max(500, min(6000, max_chars // 2))
 
-    for sub in subs:
+    source_cues = list(subs)
+    for position, sub in enumerate(source_cues):
         text = clean_subtitle_text(sub.text)
 
         if not text:
@@ -392,8 +394,13 @@ def batch_subtitles(
             "text": text,
         }
 
-        estimated_chars = len(text)
-        estimated_tokens = estimate_subtitle_tokens(text, language)
+        if context_cues:
+            item["context_before"] = [clean_subtitle_text(c.text)[:500] for c in source_cues[max(0, position-context_cues):position]]
+            item["context_after"] = [clean_subtitle_text(c.text)[:500] for c in source_cues[position+1:position+1+context_cues]]
+
+        context_text = " ".join(item.get("context_before", []) + item.get("context_after", []))
+        estimated_chars = len(text) + len(context_text)
+        estimated_tokens = estimate_subtitle_tokens(text, language) + estimate_subtitle_tokens(context_text, language)
 
         should_yield = (
             len(batch) >= batch_size

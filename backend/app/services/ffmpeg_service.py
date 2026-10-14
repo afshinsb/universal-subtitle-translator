@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import subprocess
 import time
@@ -125,7 +126,8 @@ def list_text_subtitle_streams(
                     "codec_name": codec_name,
                     "default": bool(disposition.get("default")),
                     "forced": bool(disposition.get("forced")),
-                    "comment": bool(disposition.get("comment")),
+                    "comment": bool(disposition.get("comment")) or bool(re.search(r"\bcommentary\b", tags.get("title", ""), re.IGNORECASE)),
+                    "hearing_impaired": bool(disposition.get("hearing_impaired")) or bool(re.search(r"\b(sdh|cc|hearing)\b", tags.get("title", ""), re.IGNORECASE)),
                 }
             )
 

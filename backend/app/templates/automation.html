@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <title>Subtitle Automation</title>
+    <link rel="stylesheet" href="/static/theme.css">
+    <script src="/static/theme.js"></script>
+</head>
+<body>
+<main class="app-shell">
+    <header class="topbar">
+        <div class="brand"><div class="brand-title">Subtitle Automation</div>
+        <div class="brand-subtitle">English subtitles to natural Iranian Persian</div></div>
+        {% include "_mobile_menu_button.html" %}
+        <nav class="nav"><a href="/">Home</a><a href="/batches">Batch</a>
+            <a class="active" href="/automation">Automation</a><a href="/outputs">Outputs</a>
+            {% include "_auth_nav.html" %}</nav>
+    </header>
+    <section class="page-header"><h1>Automatic subtitles</h1>
+        <p>{{ 'Enabled' if config.enabled else 'Paused' }} ·
+        {{ 'Translation provider ready' if provider_ready else 'Waiting for a translation provider key' }}</p>
+        <p>English subtitles arriving later remain pending. Completed Persian files are preserved.</p>
+    </section>
+    <section class="panel">
+        <h2>Libraries and integration</h2>
+        <form method="post" action="/automation/settings">
+            <label class="toggle"><input type="checkbox" name="enabled" value="true"
+                {% if config.enabled %}checked{% endif %}> Enable automatic processing</label>
+            <label for="roots">Automation library directories (one per line)</label>
+            <textarea id="roots" name="roots" rows="3">{{ roots_text }}</textarea>
+            <details><summary>Service path mappings</summary>
+                <p>Map Sonarr/Radarr/Bazarr directories to the paths visible here.</p>
+                <textarea name="path_mappings" rows="5">{{ mappings_text }}</textarea>
+            </details>
+            <button type="submit">Save settings</button>
+        </form>
+        <details><summary>Integration token</summary>
+            <p>Use this token as the automation password for import notifications.
+                Keep it private and configure service hooks only when ready.</p>
+            <code>{{ config.webhook_token }}</code>
+        </details>
+        <button type="button" id="scan">Check libraries now</button>
+        <p id="scan-result" role="status"></p>
+    </section>
+    <section class="panel">
+        <h2>Processing queue</h2>
+        <p>{% for state, count in counts.items() %}{{ state }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        <div style="overflow-x:auto"><table>
+            <thead><tr><th>Media</th><th>Status</th><th>Attempts</th><th>Details</th><th>Action</th></tr></thead>
+            <tbody>{% for item in queue %}<tr>
+                <td>{{ item.video_path }}</td><td>{{ item.status }}</td><td>{{ item.attempts }}</td>
+                <td>{{ item.message }}{% if item.job_id %}<br><a href="/jobs/{{ item.job_id }}">Translation details</a>{% endif %}</td>
+                <td>{% if item.status not in ['running','done','skipped'] %}
+                    <form method="post" action="/automation/queue/{{ item.id }}/retry"><button type="submit">Retry</button></form>
+                    {% endif %}</td>
+            </tr>{% else %}<tr><td colspan="5">No imported media queued yet.</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p>Refresh to see current status. Waiting for English subtitles does not consume translation retries.</p>
+    </section>
+    {% include "_footer.html" %}
+</main>
+<script>
+document.getElementById('scan').addEventListener('click', async () => {
+    const result = document.getElementById('scan-result');
+    try {
+        const response = await fetch('/automation/scan', {method:'POST'});
+        const data = await response.json();
+        result.textContent = response.ok ? 'Library check complete. Videos found: ' + data.discovered : (data.detail || 'Library check failed.');
+    } catch (error) { result.textContent = 'Connection failed. Please try again.'; }
+});
+</script>
+</body>
+</html>

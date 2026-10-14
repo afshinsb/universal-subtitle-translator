@@ -1,7 +1,8 @@
 # Prime development environment
 
 Workspace: /home/afshin/projects/universal-subtitle-translator.
-Branch dev/prime-environment, based on main 5568f9e, version 1.8.2.
+Active branch: main, tracking origin/main, version 1.8.2.
+Development-environment commit 22415a8 is preserved on main.
 Upstream CI passed:
 https://github.com/afshinsb/universal-subtitle-translator/actions/runs/38597986971
 
@@ -175,3 +176,9 @@ with packages under ~/.codex/packages/standalone and a PATH block in ~/.bashrc.
 No Node.js/system packages were installed. Existing ChatGPT auth was detected.
 The Prime CLI is unused and optional; its credentials were not displayed.
 If explicitly wanted later: cd into this checkout and run ~/.local/bin/codex.
+
+## Automatic subtitle pipeline
+
+See ../docs/automation.md. The Automation page is /automation. Processing
+remains paused, fixture-only, and provider-free until explicitly configured.
+Future work, commits and pushes use main directly.

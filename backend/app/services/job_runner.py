@@ -728,6 +728,8 @@ def run_translation_job(
     output_path_override: str | None = None,
     overwrite_existing: bool = True,
     batch_id: str | None = None,
+    preserve_cue_ids: bool = False,
+    before_publish=None,
 ) -> None:
     job_started_at = time.monotonic()
     claimed_output = None
@@ -805,6 +807,7 @@ def run_translation_job(
                 batch_size=settings.srt_batch_size,
                 max_chars=settings.srt_max_chars,
                 language=detected_source_language,
+                context_cues=2 if target_language == "Persian" else 0,
             )
         )
 
@@ -922,7 +925,12 @@ def run_translation_job(
         check_cancelled(job_id=job_id, batch_id=batch_id)
         update_job(job_id, message="Saving translated subtitle...")
 
-        write_srt(subs, output_path, overwrite=overwrite_existing)
+        if before_publish:
+            before_publish()
+        if preserve_cue_ids:
+            write_srt(subs, output_path, overwrite=overwrite_existing, add_credit=False)
+        else:
+            write_srt(subs, output_path, overwrite=overwrite_existing)
 
         final_message = "Translation completed."
 

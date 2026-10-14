@@ -2,6 +2,8 @@
 
 Primary checkout: /home/afshin/projects/universal-subtitle-translator on
 Prime 192.168.0.100. Atlas Codex develops over SSH as afshin.
+Use main exclusively, tracking origin/main. Commit and push completed work
+directly to main; never force-push, discard commits, or overwrite local changes.
 
 Use ./dev/ust (dev/compose.yml, project ust-dev) exclusively on Prime.
 Never start release Compose files: their names collide with production.
