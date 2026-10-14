@@ -82,7 +82,7 @@ def qbit_request(route, data=None):
             login=urllib.parse.urlencode({'username':cfg['username'],'password':cfg['password']}).encode()
             try:
                 with _qbit_client.open(urllib.request.Request(cfg['url'].rstrip('/')+'/api/v2/auth/login',data=login),timeout=8) as response:
-                    if response.read(100)!=b'Ok.':
+                    if response.status!=204 and response.read(100).strip()!=b'Ok.':
                         raise RuntimeError('qBittorrent authentication unavailable.')
             except Exception:
                 _qbit_client=None

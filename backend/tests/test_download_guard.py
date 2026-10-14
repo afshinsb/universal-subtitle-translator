@@ -140,3 +140,20 @@ def test_changed_save_path_is_not_deleted(example,monkeypatch):
     monkeypatch.setattr(media_intake,'api',api)
     guard.inspect(torrent,True)
     assert not calls
+
+
+@pytest.mark.parametrize('status,body',[(200,b'Ok.'),(204,b'')])
+def test_qbit_login_accepts_current_and_legacy_api(monkeypatch,status,body):
+    import io
+    class Response(io.BytesIO):
+        def __init__(self,content,code):
+            super().__init__(content)
+            self.status=code
+    class Opener:
+        def open(self,request,timeout):
+            route=request.full_url
+            return Response(body,status) if '/auth/login' in route else Response(b'[]',200)
+    monkeypatch.setattr(media_intake,'services',lambda: {'qbit':{'url':'http://qbit','username':'u','password':'p'}})
+    monkeypatch.setattr(media_intake,'_qbit_client',None)
+    monkeypatch.setattr(media_intake.urllib.request,'build_opener',lambda *a: Opener())
+    assert media_intake.qbit_request('api/v2/torrents/info?limit=1')==[]
