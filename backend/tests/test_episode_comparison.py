@@ -122,3 +122,15 @@ def test_unfinished_model_resumes_from_cached_batches(tmp_path,monkeypatch):
     assert second["outcomes"]["gpt-4o-mini"]["status"]=="done"
     assert len(calls)==11  # One unfinished batch, without resending its completed first batch.
     assert second["models"]["gpt-4o-mini"]["unknown_usage_requests"]==1
+
+
+def test_partial_latin_dialogue_is_reported_for_human_review():
+    import pysrt
+    from copy import deepcopy
+    original = pysrt.SubRipFile([pysrt.SubRipItem(index=63,start="00:04:42,657",
+        end="00:04:44,000",text="Somewhere great.")])
+    result = deepcopy(original)
+    result[0].text = "یه جای fuckin' عالی."
+    report = validate_output(original,result)
+    assert report["mixed_latin_review"] == [
+        {"cue":63,"timestamp":"00:04:42,657","words":["fuckin'"]}]

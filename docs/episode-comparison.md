@@ -90,7 +90,10 @@ range or failed request with unknown usage; do not call estimates invoice charge
 ## Validation and quality review
 
 Every batch is checked against its exact original IDs/timestamps, blanks,
-unchanged English and Persian-script content. A bad language cue can be repaired
+unchanged English and Persian-script content. Mixed Latin words are also
+reported for human review: proper names/acronyms may be legitimate, while an
+ordinary English phrase inside a Persian cue may remain partially untranslated.
+These flags must not be hidden by a passing whole-cue script check. A bad language cue can be repaired
 using its original source/context through the same engine and budget. Full
 outputs are validated again before and after atomic no-overwrite publication.
 Original video/source SHA-256 and existing subtitle hashes are checked unchanged.

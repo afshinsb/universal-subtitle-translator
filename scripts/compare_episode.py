@@ -77,9 +77,13 @@ def validate_output(source, result):
     report = validate_subtitles(result,"Persian")
     bad = []
     unchanged = []
+    mixed_latin = []
     for original, translated in zip(source,result):
         plain_source = re.sub(r"<[^>]*>|\{[^}]*\}", "",original.text).strip()
         plain_result = re.sub(r"<[^>]*>|\{[^}]*\}", "",translated.text).strip()
+        latin_words = re.findall(r"[A-Za-z][A-Za-z0-9\x27_-]*",plain_result)
+        if latin_words:
+            mixed_latin.append({"cue":original.index,"timestamp":str(original.start),"words":latin_words})
         if not plain_result or (re.search(r"[A-Za-z]",plain_source) and not has_persian_characters(plain_result)):
             bad.append(original.index)
         if re.search(r"[A-Za-z]",plain_source) and plain_source == plain_result:
@@ -87,7 +91,7 @@ def validate_output(source, result):
     if not report["passed"] or bad or unchanged:
         raise ValueError(f"Invalid Persian cues: {bad}; unchanged English cues: {unchanged}")
     return {"cue_count":len(result),"exact_alignment":True,"blank_or_untranslated":bad,
-            "unchanged_english":unchanged,"application_validation":report}
+            "unchanged_english":unchanged,"mixed_latin_review":mixed_latin,"application_validation":report}
 
 
 class Ledger:
