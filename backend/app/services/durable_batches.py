@@ -1,4 +1,5 @@
 """Bounded parallel batches with content-addressed SQLite checkpoints."""
+from contextlib import nullcontext
 import contextvars
 import hashlib
 import json
@@ -32,7 +33,7 @@ def identity(source, model, style):
     return hashlib.sha256(json.dumps(policy).encode()).hexdigest()
 
 
-def run(batches, translate, check, key, media_id):
+def run(batches, translate, check, key, media_id, guard=None):
     with connection() as conn:
         cached = {number: {int(i): text for i, text in json.loads(result).items()}
                   for number, result in conn.execute('SELECT number,result FROM batches WHERE identity=?', (key,))}
@@ -52,8 +53,9 @@ def run(batches, translate, check, key, media_id):
                 try:
                     result = translate(number, batch)
                     check()  # Fence checkpoint writes as well as final publication.
-                    with connection() as conn:
-                        conn.execute('INSERT OR IGNORE INTO batches VALUES (?,?,?,?)',
+                    with guard() if guard else nullcontext():
+                        with connection() as conn:
+                            conn.execute('INSERT OR IGNORE INTO batches VALUES (?,?,?,?)',
                                      (key, number, json.dumps(result), time.time()))
                     return result
                 except CompletionTruncated:

@@ -1,4 +1,5 @@
 """Persistent single-worker automation. No service hooks are configured here."""
+from contextlib import contextmanager
 import json
 import hashlib
 import logging
@@ -420,11 +421,22 @@ def process(item):
         if owned["owner"] != item["owner"] or owned["lease_until"] <= time.time():
             raise RuntimeError("Worker lease was lost before subtitle publication.")
 
+    @contextmanager
+    def publication_guard():
+        # Block lease reassignment/pause/cancellation during atomic publication.
+        with get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT owner,lease_until FROM automation_queue WHERE id=?", (item["id"],)).fetchone()
+            cfg = json.loads(conn.execute("SELECT value FROM automation_config WHERE id=1").fetchone()[0])
+            if not cfg["enabled"] or not row or row["owner"] != item["owner"] or row["lease_until"] <= time.time():
+                raise RuntimeError("Worker lease lost or automation paused before publication.")
+            yield
+
     register_active_job(job_id)
     try:
         with pilot_scope(path, source):
             run_translation_job(job_id, str(source), source.name, "Persian", "natural_conversational",
-                                output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish, checkpoint_media_id=item["id"])
+                                output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish, checkpoint_media_id=item["id"], publication_guard=publication_guard)
     finally:
         unregister_active_job(job_id)
     job = get_job(job_id)

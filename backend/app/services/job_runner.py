@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from pathlib import Path
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -732,6 +733,7 @@ def run_translation_job(
     before_publish=None,
     check_automation=None,
     checkpoint_media_id=None,
+    publication_guard=None,
 ) -> None:
     def check_job():
         if check_automation:
@@ -843,7 +845,7 @@ def run_translation_job(
         if checkpoint_media_id:
             from app.services import durable_batches
             key = durable_batches.identity(input_path, settings.openai_model, style)
-            translated_batches = durable_batches.run(batches, translate, check_job, key, checkpoint_media_id)
+            translated_batches = durable_batches.run(batches, translate, check_job, key, checkpoint_media_id, publication_guard)
         else:
             translated_batches = ((number, batch, translate(number, batch))
                                   for number, batch in enumerate(batches, 1))
@@ -932,10 +934,11 @@ def run_translation_job(
 
         if before_publish:
             before_publish()
-        if preserve_cue_ids:
-            write_srt(subs, output_path, overwrite=overwrite_existing, add_credit=False)
-        else:
-            write_srt(subs, output_path, overwrite=overwrite_existing)
+        with publication_guard() if publication_guard else nullcontext():
+            if preserve_cue_ids:
+                write_srt(subs, output_path, overwrite=overwrite_existing, add_credit=False)
+            else:
+                write_srt(subs, output_path, overwrite=overwrite_existing)
 
         final_message = "Translation completed."
 
