@@ -158,8 +158,8 @@ their newly generated paths. Never clear the scope to unrestricted libraries.
 3. Confirm exclusive ownership of translation for that movie:
    Radarr legacy Custom Script ID 1 must be disabled before enabling the new
    webhook. Keep subs-translator asleep and do not invoke its host wrapper for
-   the pilot. Inspect root/system schedulers before activation; afshin's crontab
-   currently has no legacy references. UST's own deduplication cannot prevent
+   the pilot. Read-only inspection of 37 cron/systemd configuration files found no legacy
+   references; afshin's crontab also has none. Recheck at activation. UST's own deduplication cannot prevent
    an independently invoked legacy script from repairing/replacing its output.
 4. On /automation, enter ONLY the exact movie in selected-file scope and apply.
    Keep enabled unchecked. Roots may stay /media/movies, /media/shows and fixtures
@@ -230,10 +230,15 @@ No actual hook has been changed. No production translator deployed.
 Real-library automation is paused and blocked by a deployment gate.
 Approval is still needed for the specific pilot movie, legacy-hook exclusion,
 provider spend, eventual hook configuration, and production promotion.
-Authenticated Jellyfin library monitoring/refresh behavior and root/system
-legacy scheduling need operator verification before the pilot.
+Authenticated Jellyfin library monitoring/refresh behavior still needs operator
+verification. Cron/systemd configuration inspection found no legacy references;
+manual/external invocation of the legacy wrapper must remain excluded.
 
 Primary references:
 - Sonarr webhook fields: https://github.com/Sonarr/Sonarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookSettings.cs
 - Radarr webhook fields: https://github.com/Radarr/Radarr/blob/develop/src/NzbDrone.Core/Notifications/Webhook/WebhookSettings.cs
 - Bazarr variables: https://wiki.bazarr.media/Additional-Configuration/Settings/Subtitles/#custom-post-processing
+
+Final verification: 108 tests passed, 30 pre-existing containers unchanged,
+Sonarr/Radarr notification responses and Bazarr configuration hashes unchanged,
+and all 97 existing Persian sidecar hashes unchanged. No real-library writes.
