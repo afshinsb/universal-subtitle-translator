@@ -10,11 +10,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 import os
 import sqlite3
+import time
+from uuid import uuid4
 from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 
 
 _scope = ContextVar("pilot_scope", default=None)
+_reservation = ContextVar("pilot_reservation", default=None)
 
 
 @contextmanager
@@ -39,6 +42,7 @@ SYSTEM_PROMPT = "You translate subtitles. You must obey the requested target lan
 
 
 def reserve_request(model, prompt):
+    _reservation.set(None)
     filename = os.getenv("UST_PILOT_BUDGET_FILE")
     if not filename:
         return None
@@ -73,6 +77,10 @@ def reserve_request(model, prompt):
     with sqlite3.connect(ledger, timeout=30) as conn:
         ledger.chmod(0o600)
         conn.execute("CREATE TABLE IF NOT EXISTS pilot_budget (id INTEGER PRIMARY KEY CHECK(id=1), config TEXT NOT NULL, reserved INTEGER NOT NULL)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS pilot_requests (
+            id TEXT PRIMARY KEY, created REAL NOT NULL, reserved INTEGER NOT NULL,
+            state TEXT NOT NULL DEFAULT 'reserved', usage TEXT, latency REAL,
+            response_model TEXT, request_id TEXT, error_type TEXT)""")
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT config,reserved FROM pilot_budget WHERE id=1").fetchone()
         if row and row[0] != fingerprint:
@@ -81,9 +89,31 @@ def reserve_request(model, prompt):
         if spent + reserve > limit:
             raise RuntimeError("Pilot spending ceiling reached; no provider request made.")
         conn.execute("INSERT OR REPLACE INTO pilot_budget VALUES (1,?,?)", (fingerprint, spent + reserve))
+        request_id = uuid4().hex
+        conn.execute("INSERT INTO pilot_requests(id,created,reserved) VALUES (?,?,?)",
+                     (request_id, time.time(), reserve))
+    _reservation.set((ledger, request_id))
     kwargs = {"max_completion_tokens": output_cap, "service_tier": "default"}
     if effort is not None:
         kwargs["reasoning_effort"] = effort
     else:
         kwargs["temperature"] = 0.1
     return kwargs
+
+
+def record_response(response=None, latency=0, error=None):
+    """Audit usage without refunding or changing any persistent reservation."""
+    reservation = _reservation.get()
+    if not reservation:
+        return
+    ledger, request_id = reservation
+    usage = getattr(response, "usage", None)
+    raw = usage.model_dump(mode="json") if usage is not None else None
+    with sqlite3.connect(ledger, timeout=30) as conn:
+        conn.execute("""UPDATE pilot_requests SET state=?,usage=?,latency=?,
+            response_model=?,request_id=?,error_type=? WHERE id=?""",
+            ("completed" if response is not None else "uncertain",
+             json.dumps(raw) if raw is not None else None, latency,
+             getattr(response, "model", None), getattr(response, "_request_id", None),
+             type(error).__name__ if error is not None else None, request_id))
+    _reservation.set(None)

@@ -1,11 +1,12 @@
 import re
 import json
 import os
+import time
 from dataclasses import dataclass
 
 from openai import OpenAI
 
-from app.services.pilot_budget import SYSTEM_PROMPT, reserve_request
+from app.services.pilot_budget import SYSTEM_PROMPT, reserve_request, record_response
 from app.services.daily_budget import reserve_daily, record_usage
 from app.config import settings
 from app.models import LANGUAGE_CODES, has_persian_characters, is_persian_language, normalize_language
@@ -344,14 +345,20 @@ def call_openai(prompt: str) -> TranslationResult:
             options["service_tier"] = "default"
         reservation = reserve_daily(settings.openai_model, prompt, options)
         request_client = client.with_options(max_retries=0) if guarded or reservation else client
-        response = request_client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            **options,
-        )
+        started = time.monotonic()
+        try:
+            response = request_client.chat.completions.create(
+                model=settings.openai_model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                **options,
+            )
+        except Exception as exc:
+            record_response(latency=time.monotonic() - started, error=exc)
+            raise
+        record_response(response, time.monotonic() - started)
 
     record_usage(reservation, getattr(response, "usage", None))
     if not response.choices:
