@@ -59,7 +59,17 @@ jobs:
           tags: ust-frontend:smoke
       - name: Verify frontend proxy and backend startup without production data
         run: |
-          trap 'docker rm -f ust-ci-frontend ust-ci-backend; docker network rm ust-ci' EXIT
+          cleanup() {
+            task_status=$?
+            if [ "$task_status" -ne 0 ]; then
+              docker logs ust-ci-backend || true
+              docker logs ust-ci-frontend || true
+              docker inspect -f '{{json .State.Health}}' ust-ci-backend ust-ci-frontend || true
+            fi
+            docker rm -f ust-ci-frontend ust-ci-backend || true
+            docker network rm ust-ci || true
+          }
+          trap cleanup EXIT
           docker network create ust-ci
           docker run -d --name ust-ci-backend --network ust-ci --network-alias backend --init --cap-drop ALL --security-opt no-new-privileges --tmpfs /app/data:uid=1000,gid=1000,mode=0700 ust-backend:smoke
           for attempt in $(seq 1 30); do
@@ -68,6 +78,11 @@ jobs:
           done
           test "$(docker inspect -f '{{.State.Health.Status}}' ust-ci-backend)" = healthy
           docker run -d --name ust-ci-frontend --network ust-ci -p 127.0.0.1:2288:80 --security-opt no-new-privileges ust-frontend:smoke
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' ust-ci-frontend)" = healthy ]; then break; fi
+            sleep 2
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' ust-ci-frontend)" = healthy
           curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:2288/health
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:2288/login)" = 200
       - name: Build backend for amd64 and arm64 (no publishing)
