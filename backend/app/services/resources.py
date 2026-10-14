@@ -11,6 +11,7 @@ from uuid import uuid4
 from app.config import settings
 
 request_identity = contextvars.ContextVar('request_identity', default='manual')
+request_check = contextvars.ContextVar("request_check", default=None)
 completion_cap = contextvars.ContextVar('completion_cap', default=0)
 
 

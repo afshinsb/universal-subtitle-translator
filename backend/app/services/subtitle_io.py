@@ -161,6 +161,12 @@ def write_srt(subs, path: Path, *, overwrite: bool = True, add_credit: bool = Tr
             # Link publication is atomic and refuses an existing destination,
             # even if another process creates it after the initial check.
             os.link(temp_path, path)
+        if hasattr(os, "O_DIRECTORY"):
+            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
     finally:
         temp_path.unlink(missing_ok=True)
 

@@ -337,6 +337,11 @@ def provider_request_options() -> dict:
 
 
 def call_openai(prompt: str) -> TranslationResult:
+    with resources.slot("api", resources.request_check.get()):
+        return _call_openai(prompt)
+
+
+def _call_openai(prompt: str) -> TranslationResult:
     with get_openai_client() as client:
         if os.getenv("UST_PILOT_BUDGET_FILE") or settings.openai_daily_budget_usd:
             if str(client.base_url).rstrip("/") != "https://api.openai.com/v1":
@@ -349,8 +354,7 @@ def call_openai(prompt: str) -> TranslationResult:
         request_client = client.with_options(max_retries=0) if guarded or reservation else client
         started = time.monotonic()
         try:
-            with resources.slot("api"):
-                response = request_client.chat.completions.create(
+            response = request_client.chat.completions.create(
                 model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -359,6 +363,8 @@ def call_openai(prompt: str) -> TranslationResult:
                 **options,
             )
         except Exception as exc:
+            if getattr(exc, "status_code", None) in {429, 500, 502, 503, 504}:
+                resources.throttled()
             record_response(latency=time.monotonic() - started, error=exc)
             raise
         record_response(response, time.monotonic() - started)

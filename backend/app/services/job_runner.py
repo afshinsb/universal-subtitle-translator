@@ -837,10 +837,15 @@ def run_translation_job(
         def translate(number, batch):
             check_job()
             update_job(job_id, message=f"Translating batch {number} of {len(batches)}...")
-            return translate_batch_with_repair(
-                job_id=job_id, batch=batch, source_language=detected_source_language,
-                target_language=target_language, style=style, batch_number=number,
-                batch_count=len(batches), cancel_check=check_job)
+            from app.services.resources import request_check
+            token = request_check.set(check_job)
+            try:
+                return translate_batch_with_repair(
+                    job_id=job_id, batch=batch, source_language=detected_source_language,
+                    target_language=target_language, style=style, batch_number=number,
+                    batch_count=len(batches), cancel_check=check_job)
+            finally:
+                request_check.reset(token)
 
         if checkpoint_media_id:
             from app.services import durable_batches

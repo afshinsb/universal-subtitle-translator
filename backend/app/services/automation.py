@@ -7,6 +7,7 @@ import os
 import secrets
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from app.services import resources, daily_budget
 from pathlib import Path
@@ -39,6 +40,8 @@ def init_schema():
             message TEXT NOT NULL DEFAULT '', job_id TEXT, output_path TEXT,
             signature TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        conn.execute("CREATE TABLE IF NOT EXISTS automation_job_history (job_id TEXT PRIMARY KEY,queue_id TEXT)")
+        conn.execute("CREATE INDEX IF NOT EXISTS logs_retention ON logs(created_at)")
         conn.execute("CREATE INDEX IF NOT EXISTS automation_due ON automation_queue(status, next_run)")
         root = settings.media_root / "fixtures" if settings.media_root else None
         config = {"enabled": False, "roots": [str(root)] if root and root.is_dir() else [],
@@ -405,6 +408,8 @@ def process(item):
                      (attempt, job_id, item["id"], item["owner"]))
     create_job(job_id, source.name, str(source), "Persian", "English",
                "natural_conversational", settings.openai_model)
+    with get_connection() as conn:
+        conn.execute("INSERT OR IGNORE INTO automation_job_history VALUES (?,?)", (job_id, item["id"]))
     def before_publish():
         if not config()["enabled"] or not permitted_file(path):
             raise RuntimeError("Automation paused or processing scope changed.")
@@ -530,6 +535,9 @@ class Worker:
                     if config()["enabled"]:
                         if time.time() >= next_scan:
                             reconcile()
+                            cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
+                            with get_connection() as conn:
+                                conn.execute("DELETE FROM logs WHERE id IN (SELECT id FROM logs WHERE created_at<? AND job_id IN (SELECT job_id FROM automation_job_history) LIMIT 1000)", (cutoff,))
                             next_scan = time.time() + WAIT_SECONDS
                         if len(futures) < resources.limits()["job_limit"]:
                             futures.add(pool.submit(process_one))

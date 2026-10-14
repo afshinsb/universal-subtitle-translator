@@ -126,6 +126,11 @@ def status():
     if not path.is_file():
         return result
     with sqlite3.connect("file:" + str(path) + "?mode=ro", uri=True) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(provider_reservations)")}
+        if "actual" not in columns:
+            row = conn.execute("SELECT COALESCE(SUM(bound),0),COUNT(*),COALESCE(SUM(reasoning_tokens),0) FROM provider_reservations WHERE day=?", (utc_day(),)).fetchone()
+            result.update(reserved_usd=row[0]/1_000_000_000, requests=row[1], reasoning_tokens=row[2])
+            return result
         row = conn.execute("""SELECT COALESCE(SUM(CASE WHEN actual IS NULL THEN bound ELSE 0 END),0),COUNT(*),
             COALESCE(SUM(reasoning_tokens),0),COALESCE(SUM(actual),0) FROM provider_reservations WHERE day=?""", (utc_day(),)).fetchone()
     result.update(reserved_usd=row[0]/1_000_000_000, requests=row[1], reasoning_tokens=row[2], consumed_usd=row[3]/1_000_000_000)
