@@ -81,8 +81,8 @@ def login_submit(
             status_code=503,
         )
 
-    username_ok = hmac.compare_digest(username, settings.admin_username)
-    password_ok = hmac.compare_digest(password, settings.admin_password or "")
+    username_ok = hmac.compare_digest(username.encode("utf-8"), settings.admin_username.encode("utf-8"))
+    password_ok = hmac.compare_digest(password.encode("utf-8"), (settings.admin_password or "").encode("utf-8"))
 
     if not username_ok or not password_ok:
         return templates.TemplateResponse(

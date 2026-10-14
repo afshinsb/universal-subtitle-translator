@@ -304,22 +304,24 @@ def parse_translated_block_text(text: str) -> dict[int, str]:
 
 
 def call_openai(prompt: str) -> TranslationResult:
-    client = get_openai_client()
+    with get_openai_client() as client:
+        response = client.chat.completions.create(
+            model=settings.openai_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You translate subtitles. You must obey the requested target language and block format exactly.",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=0.1,
+        )
 
-    response = client.chat.completions.create(
-        model=settings.openai_model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You translate subtitles. You must obey the requested target language and block format exactly.",
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        temperature=0.1,
-    )
+    if not response.choices:
+        raise RuntimeError("The translation provider returned no choices.")
 
     output_text = response.choices[0].message.content or ""
     parsed = parse_translated_blocks(output_text)
@@ -402,14 +404,25 @@ def translate_batch(
 
             retry_result = call_openai(retry_prompt)
 
+            # Both requests consumed tokens even if the first result is kept.
+            input_tokens = result.input_tokens + retry_result.input_tokens
+            output_tokens = result.output_tokens + retry_result.output_tokens
+            total_tokens = result.total_tokens + retry_result.total_tokens
+
             retry_non_persian_count = count_non_persian_outputs(
                 retry_result.translations,
                 target_language,
             )
 
             if retry_non_persian_count <= non_persian_count:
+                retry_result.input_tokens = input_tokens
+                retry_result.output_tokens = output_tokens
+                retry_result.total_tokens = total_tokens
                 return mark_retry(retry_result, attempts=2, retry_reason=retry_reason)
 
+            result.input_tokens = input_tokens
+            result.output_tokens = output_tokens
+            result.total_tokens = total_tokens
             return mark_retry(result, attempts=2, retry_reason=f"{retry_reason} Retry did not improve output.")
 
     return result

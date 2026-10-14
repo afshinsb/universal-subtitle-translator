@@ -131,12 +131,9 @@ def language_code(language: str | None) -> str:
 
 
 def known_language_code(language: str | None) -> str | None:
-    code = language_code(language)
-
-    if code in LANGUAGE_NAMES_BY_CODE:
-        return code
-
-    return None
+    if not language:
+        return None
+    return LANGUAGE_CODES.get(normalize_language(language))
 
 
 def language_name_from_suffix(suffix: str | None) -> str | None:

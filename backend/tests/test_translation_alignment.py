@@ -47,7 +47,7 @@ def run_job_with_subs(monkeypatch, subs, translated=None, write_callback=None):
     if translated is not None:
         monkeypatch.setattr(job_runner, "translate_batch_with_repair", lambda **kwargs: translated)
 
-    def fake_write_srt(saved_subs, path: Path):
+    def fake_write_srt(saved_subs, path: Path, **kwargs):
         if write_callback:
             write_callback(saved_subs, path)
 
@@ -127,6 +127,22 @@ def test_alignment_validation_detects_shifted_ids_and_reordered_ids():
 
     assert not reordered_report["passed"]
     assert reordered_report["reordered"] is True
+
+
+def test_alignment_rejects_blank_translation():
+    report = job_runner.validate_translation_alignment(
+        [{"index": 1, "text": "Hello"}], make_result({1: " \n"}, [1])
+    )
+    assert not report["passed"]
+
+
+def test_alignment_repairs_blank_translation(monkeypatch):
+    results = iter([make_result({1: ""}, [1]), make_result({1: ""}, [1]), make_result({1: "Bonjour"}, [1])])
+    monkeypatch.setattr(job_runner, "translate_batch", lambda **kwargs: next(results))
+    monkeypatch.setattr(job_runner, "add_log", lambda **kwargs: None)
+    assert job_runner.translate_batch_with_repair(
+        "job", [{"index": 1, "text": "Hello"}], "English", "French", "formal", 1, 1
+    ) == {1: "Bonjour"}
 
 
 def test_translate_batch_retries_invalid_alignment_before_returning(monkeypatch):
@@ -223,6 +239,29 @@ def test_duplicate_srt_indexes_fail_safely(monkeypatch):
 
     assert updates[-1]["status"] == "failed"
     assert "Duplicate SRT subtitle indexes" in updates[-1]["error"]
+
+
+def test_active_output_is_rejected_before_provider_call(monkeypatch):
+    from app.config import settings
+    output = settings.output_dir / "input.fr.srt"
+    monkeypatch.setattr(job_runner, "ACTIVE_OUTPUTS", {output.resolve()})
+    monkeypatch.setattr(job_runner, "translate_batch_with_repair", lambda **kwargs: pytest.fail("duplicate request"))
+    updates, _ = run_job_with_subs(monkeypatch, [make_sub(1, "Hello")])
+    assert updates[-1]["status"] == "failed"
+    assert "already being translated" in updates[-1]["error"]
+
+
+def test_cancelled_provider_reply_is_not_saved(monkeypatch):
+    writes = []
+    monkeypatch.setattr(job_runner, "CANCELLED_JOBS", set())
+    def late_reply(**kwargs):
+        job_runner.CANCELLED_JOBS.add("job-1")
+        return {1: "Bonjour"}
+    monkeypatch.setattr(job_runner, "translate_batch_with_repair", late_reply)
+    monkeypatch.setattr(job_runner, "get_job", lambda job_id: {"status": "running"})
+    updates, _ = run_job_with_subs(monkeypatch, [make_sub(1, "Hello")], write_callback=lambda *args: writes.append(args))
+    assert updates[-1]["status"] == "cancelled"
+    assert writes == []
 
 
 def test_shifted_model_output_is_rejected_and_never_written(monkeypatch):

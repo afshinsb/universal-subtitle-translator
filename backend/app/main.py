@@ -1,4 +1,6 @@
 import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
@@ -7,16 +9,32 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import settings, ensure_directories, run_openai_api_key_test, startup_config_warnings
+from app.config import auth_config_checks, settings, ensure_directories, run_openai_api_key_test, startup_config_warnings
 from app.database import init_db
 from app.routes import auth, jobs, files, settings as settings_routes, logs, batches, cleanup as cleanup_routes
-from app.services.job_runner import repair_stale_work
+from app.services.job_runner import repair_stale_work, request_shutdown
 
 logger = logging.getLogger(__name__)
-app = FastAPI(title=settings.app_name, version=settings.app_version)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-PUBLIC_PATH_PREFIXES = ("/static",)
+
+@asynccontextmanager
+async def lifespan(app):
+    ensure_directories()
+    run_openai_api_key_test()
+    for warning in startup_config_warnings():
+        logger.warning("Configuration warning: %s", warning)
+    init_db()
+    repair_stale_work(reason="backend startup")
+    try:
+        yield
+    finally:
+        request_shutdown()
+
+
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+PUBLIC_PATH_PREFIXES = ("/static/",)
 PUBLIC_PATHS = {"/health", "/login", "/logout"}
 
 
@@ -27,12 +45,20 @@ def wants_html(request: Request) -> bool:
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    if not settings.auth_enabled:
-        return await call_next(request)
-
     path = request.url.path
 
     if path in PUBLIC_PATHS or any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES):
+        return await call_next(request)
+
+    # A cookie signed with the shipped development secret is forgeable. Apply
+    # production setup checks before trusting it, including for existing sessions.
+    if any(check["blocking"] and not check["ok"] for check in auth_config_checks()):
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Authentication setup is incomplete. Check AUTH_ENABLED, ADMIN_PASSWORD and SESSION_SECRET."},
+        )
+
+    if not settings.auth_enabled:
         return await call_next(request)
 
     if request.session.get("authenticated") is True:
@@ -58,18 +84,8 @@ app.add_middleware(
     session_cookie="ust_session",
     max_age=60 * 60 * 12,
     same_site="lax",
-    https_only=False,
+    https_only=settings.session_https_only,
 )
-
-
-@app.on_event("startup")
-def startup_event():
-    ensure_directories()
-    run_openai_api_key_test()
-    for warning in startup_config_warnings():
-        logger.warning("Configuration warning: %s", warning)
-    init_db()
-    repair_stale_work(reason="backend startup")
 
 
 @app.exception_handler(RequestValidationError)

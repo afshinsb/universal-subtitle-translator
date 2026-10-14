@@ -1,4 +1,6 @@
 from pathlib import Path
+import codecs
+from copy import copy
 import re
 import os
 from uuid import uuid4
@@ -66,15 +68,25 @@ def estimate_subtitle_tokens(text: str, language: str | None = None) -> int:
 
 
 def read_srt(path: Path):
-    encodings = ("utf-8", "utf-8-sig", "cp1256", "cp1252", "latin-1")
+    with path.open("rb") as source:
+        prefix = source.read(4)
+    if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        encodings = ("utf-32",)
+    elif prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        encodings = ("utf-16",)
+    else:
+        encodings = ("utf-8-sig", "cp1256", "cp1252", "latin-1")
 
     for encoding in encodings:
         try:
-            return pysrt.open(str(path), encoding=encoding)
+            # ERROR_PASS silently discards malformed cues and their dialogue.
+            return pysrt.open(str(path), encoding=encoding, error_handling=pysrt.ERROR_RAISE)
         except UnicodeDecodeError:
             continue
+        except pysrt.Error as exc:
+            raise RuntimeError("Invalid SRT structure; check cue numbers and timestamps.") from exc
 
-    return pysrt.open(str(path), encoding="latin-1")
+    raise RuntimeError("Invalid SRT text encoding.")
 
 
 def time_from_ms(milliseconds: int) -> pysrt.SubRipTime:
@@ -124,7 +136,7 @@ def with_credit_watermarks(subs):
         watermarked.append(start_cues[0])
 
     for sub in subs:
-        watermarked.append(sub)
+        watermarked.append(copy(sub))
 
     watermarked.append(start_cues[-1])
 
@@ -134,17 +146,23 @@ def with_credit_watermarks(subs):
     return watermarked
 
 
-def write_srt(subs, path: Path) -> None:
+def write_srt(subs, path: Path, *, overwrite: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     output_subs = with_credit_watermarks(subs)
 
     try:
         output_subs.save(str(temp_path), encoding="utf-8")
-        os.replace(temp_path, path)
-    except Exception:
+        with temp_path.open("rb+") as output:
+            os.fsync(output.fileno())
+        if overwrite:
+            os.replace(temp_path, path)
+        else:
+            # Link publication is atomic and refuses an existing destination,
+            # even if another process creates it after the initial check.
+            os.link(temp_path, path)
+    finally:
         temp_path.unlink(missing_ok=True)
-        raise
 
 
 def clean_subtitle_text(text: str) -> str:
@@ -287,7 +305,15 @@ def split_spaced_line(line: str, limit: int) -> list[str]:
 
 
 def wrap_subtitle_text(text: str, language: str | None = None) -> str:
-    cleaned = normalize_punctuation_spacing(clean_subtitle_text(text), language)
+    tags = {}
+
+    def protect_tag(match):
+        token = chr(0xF0000 + len(tags))
+        tags[token] = match.group()
+        return token
+
+    protected = re.sub(r"<[^>\n]+>", protect_tag, text)
+    cleaned = normalize_punctuation_spacing(clean_subtitle_text(protected), language)
 
     if not cleaned:
         return ""
@@ -305,7 +331,10 @@ def wrap_subtitle_text(text: str, language: str | None = None) -> str:
         else:
             wrapped_lines.extend(split_spaced_line(line, limit))
 
-    return apply_rtl_direction_marks("\n".join(wrapped_lines), language)
+    wrapped = "\n".join(wrapped_lines)
+    for token, tag in tags.items():
+        wrapped = wrapped.replace(token, tag)
+    return apply_rtl_direction_marks(wrapped, language)
 
 
 def make_output_filename(input_filename: str, target_language: str) -> str:

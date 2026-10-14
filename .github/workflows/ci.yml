@@ -1,0 +1,82 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: python -m pip install --require-hashes -r backend/requirements-dev.txt
+      - run: python -m ruff check backend scripts
+      - run: python -m compileall -q backend/app scripts
+      - run: python -m pytest -q
+      - run: python scripts/smoke.py
+      - run: python -m pip_audit --disable-pip --no-deps -r backend/requirements.txt
+      - name: Validate Compose without user credentials
+        env:
+          DOCKERHUB_NAMESPACE: fixture
+        run: |
+          docker compose --env-file .env.example config -q
+          docker compose --env-file .env.example -f docker-compose.hub.yml config -q
+
+  containers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build amd64 smoke image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          load: true
+          tags: ust-backend:smoke
+      - name: Run actual extraction and translation fixture in the image
+        run: docker run --rm --network none -v "$GITHUB_WORKSPACE/scripts:/smoke:ro" --entrypoint python ust-backend:smoke /smoke/smoke.py
+      - name: Build frontend smoke image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: frontend
+          load: true
+          tags: ust-frontend:smoke
+      - name: Verify frontend proxy and backend startup without production data
+        run: |
+          trap 'docker rm -f ust-ci-frontend ust-ci-backend; docker network rm ust-ci' EXIT
+          docker network create ust-ci
+          docker run -d --name ust-ci-backend --network ust-ci --network-alias backend --init --cap-drop ALL --security-opt no-new-privileges --tmpfs /app/data:uid=1000,gid=1000,mode=0700 ust-backend:smoke
+          for attempt in $(seq 1 30); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' ust-ci-backend)" = healthy ]; then break; fi
+            sleep 2
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' ust-ci-backend)" = healthy
+          docker run -d --name ust-ci-frontend --network ust-ci -p 127.0.0.1:2288:80 --security-opt no-new-privileges ust-frontend:smoke
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:2288/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:2288/login)" = 200
+      - name: Build backend for amd64 and arm64 (no publishing)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          platforms: linux/amd64,linux/arm64
+      - name: Build frontend for amd64 and arm64 (no publishing)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: frontend
+          platforms: linux/amd64,linux/arm64

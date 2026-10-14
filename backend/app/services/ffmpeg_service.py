@@ -1,8 +1,10 @@
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
 from typing import Callable
+from uuid import uuid4
 
 from app.config import settings
 
@@ -36,6 +38,7 @@ def run_command(
     try:
         process = subprocess.Popen(
             command,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -67,17 +70,22 @@ def run_command(
     except Exception:
         stop_process(process, terminate=False)
         raise
+    finally:
+        if process.stdout:
+            process.stdout.close()
+        if process.stderr:
+            process.stderr.close()
 
 
 def get_media_info(video_path: Path, cancel_check: Callable[[], bool] | None = None) -> dict:
     command = [
         "ffprobe",
         "-v",
-        "quiet",
+        "error",
         "-print_format",
         "json",
         "-show_streams",
-        str(video_path),
+        str(video_path.resolve()),
     ]
 
     result = run_command(command, cancel_check=cancel_check)
@@ -109,11 +117,15 @@ def list_text_subtitle_streams(
         index = stream.get("index")
 
         if codec_name in TEXT_SUBTITLE_CODECS:
+            disposition = stream.get("disposition", {})
             subtitle_streams.append(
                 {
                     "index": index,
                     "language": language,
                     "codec_name": codec_name,
+                    "default": bool(disposition.get("default")),
+                    "forced": bool(disposition.get("forced")),
+                    "comment": bool(disposition.get("comment")),
                 }
             )
 
@@ -151,25 +163,30 @@ def extract_subtitle(
         raise RuntimeError("No extractable text subtitle stream found.")
 
     output_srt_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_srt_path.with_name(f".{output_srt_path.stem}.{uuid4().hex}.srt")
 
     command = [
         "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
         "-y",
         "-i",
-        str(video_path),
+        str(video_path.resolve()),
         "-map",
         f"0:{stream_index}",
-        str(output_srt_path),
+        "-c:s",
+        "srt",
+        str(temp_path.resolve()),
     ]
 
     try:
         result = run_command(command, cancel_check=cancel_check)
-    except Exception:
-        output_srt_path.unlink(missing_ok=True)
-        raise
-
-    if result.returncode != 0:
-        output_srt_path.unlink(missing_ok=True)
-        raise RuntimeError(result.stderr)
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr or "FFmpeg subtitle extraction failed.")
+        # Never expose partial extraction or replace a user's existing sidecar.
+        os.link(temp_path, output_srt_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
     return output_srt_path

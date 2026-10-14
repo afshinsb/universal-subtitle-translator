@@ -1,4 +1,6 @@
 import sqlite3
+from contextlib import contextmanager
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
 
@@ -9,10 +11,16 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_connection() -> sqlite3.Connection:
+@contextmanager
+def get_connection() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(settings.database_path, timeout=30)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        # sqlite3's context manager commits/rolls back but does not close it.
+        conn.close()
 
 
 def column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:

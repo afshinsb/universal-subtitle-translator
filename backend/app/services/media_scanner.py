@@ -1,5 +1,4 @@
 import os
-import re
 from pathlib import Path
 from typing import Callable
 
@@ -52,10 +51,11 @@ def preference_rank(language: str, preferences: list[str]) -> int:
 
 
 def subtitle_language_from_name(path: Path, video_stem: str | None = None) -> str:
-    parts = path.stem.split(".")
-
-    if video_stem and parts and parts[0].lower() == video_stem.lower():
-        parts = parts[1:]
+    stem = path.stem
+    if video_stem:
+        # Language tags belong after the complete video title, including dots.
+        stem = stem[len(video_stem):] if stem.casefold().startswith(video_stem.casefold()) else stem
+    parts = stem.split(".")
 
     for part in reversed(parts):
         code = normalize_language_code(part)
@@ -98,11 +98,23 @@ def translated_output_exists(folder: Path, base_stem: str, target_language: str)
     if direct.exists():
         return direct
 
-    for path in folder.glob(f"{base_stem}*.srt"):
+    for path in sidecar_subtitles(folder, base_stem):
         if subtitle_language_from_name(path, base_stem) == target_code:
             return path
 
     return None
+
+
+def sidecar_subtitles(folder: Path, base_stem: str) -> list[Path]:
+    """Match literal titles, not glob syntax or similarly prefixed movies."""
+    stem = base_stem.casefold()
+    return sorted(
+        (path for path in folder.iterdir()
+         if path.suffix.lower() == ".srt"
+         and (path.stem.casefold() == stem or path.stem.casefold().startswith(stem + "."))
+         and path.is_file() and is_inside_media_root(path)),
+        key=lambda path: path.name.casefold(),
+    )
 
 
 def is_inside_media_root(path: Path) -> bool:
@@ -129,11 +141,8 @@ def safe_output_subfolder(path: Path, root: Path) -> Path:
     if relative in {"", "."}:
         return Path()
 
-    parts = [
-        re.sub(r"[^A-Za-z0-9._ -]", "_", part)
-        for part in Path(relative).parts
-        if part not in {"", "."}
-    ]
+    # Preserve distinct Unicode folder names instead of collapsing them to '_'.
+    parts = [part for part in Path(relative).parts if part not in {"", "."}]
 
     return Path(*parts) if parts else Path()
 
@@ -165,7 +174,7 @@ def matching_external_subtitles(video_path: Path, target_language: str) -> list[
     target_code = language_code(target_language)
     matches = []
 
-    for path in sorted(folder.glob(f"{video_path.stem}*.srt")):
+    for path in sidecar_subtitles(folder, video_path.stem):
         language = subtitle_language_from_name(path, video_path.stem)
 
         if language == target_code:
@@ -218,7 +227,13 @@ def choose_embedded_subtitle(streams: list[dict], preferences: list[str]) -> dic
 
     return sorted(
         streams,
-        key=lambda item: (preference_rank(item["language"], preferences), item["index"]),
+        key=lambda item: (
+            preference_rank(item["language"], preferences),
+            bool(item.get("forced")),
+            bool(item.get("comment")),
+            not bool(item.get("default")),
+            item["index"],
+        ),
     )[0]
 
 

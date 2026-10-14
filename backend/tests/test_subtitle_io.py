@@ -1,4 +1,5 @@
 import pysrt
+import pytest
 
 from app.services.subtitle_io import (
     batch_subtitles,
@@ -6,7 +7,43 @@ from app.services.subtitle_io import (
     with_credit_watermarks,
     write_srt,
     wrap_subtitle_text,
+    read_srt,
 )
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16", "utf-32"])
+def test_read_unicode_bom_subtitles(tmp_path, encoding):
+    path = tmp_path / "movie.en.srt"
+    path.write_text("1\n00:00:01,234 --> 00:00:02,567\n<i>Hello — café!</i>\nSecond line.\n", encoding=encoding)
+    subs = read_srt(path)
+    assert len(subs) == 1
+    assert subs[0].text == "<i>Hello — café!</i>\nSecond line."
+    assert subs[0].start.ordinal == 1234
+    assert subs[0].end.ordinal == 2567
+
+
+def test_malformed_block_is_not_silently_dropped(tmp_path):
+    path = tmp_path / "broken.srt"
+    path.write_text("1\n00:00:01,000 --> 00:00:02,000\nValid.\n\n2\nbad timing\nMissing.\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Invalid SRT"):
+        read_srt(path)
+
+
+def test_no_overwrite_publication_preserves_existing_output(tmp_path):
+    path = tmp_path / "Movie.fr.srt"
+    path.write_bytes(b"user subtitle")
+    with pytest.raises(FileExistsError):
+        write_srt(pysrt.SubRipFile([make_sub("Bonjour")]), path, overwrite=False)
+    assert path.read_bytes() == b"user subtitle"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [path.name]
+
+
+def test_wrapping_does_not_split_formatting_tags():
+    tag = '<font face="A very long font name with spaces" color="#FFFFFF">'
+    text = tag + "Hello " * 20 + '</font>'
+    wrapped = wrap_subtitle_text(text, "French")
+    assert tag in wrapped
+    assert '</font>' in wrapped
 
 
 def without_direction_marks(text: str) -> str:

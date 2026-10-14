@@ -38,6 +38,43 @@ def test_language_aliases_are_normalized():
     assert media_scanner.normalize_language_code("not-a-language") == "unknown"
 
 
+@pytest.mark.parametrize("stem", ["Movie", "Movie [2026]", "فیلم with spaces", "Movie.en.2026"])
+def test_sidecars_match_literal_full_video_stem(tmp_path, monkeypatch, stem):
+    video = touch(tmp_path / f"{stem}.mkv")
+    expected = touch(tmp_path / f"{stem}.EN.SRT")
+    touch(tmp_path / f"{stem}2.fa.srt")
+    touch(tmp_path / f"{stem}2.en.srt")
+    monkeypatch.setattr(media_scanner, "count_srt_subtitles", lambda path: 2)
+    monkeypatch.setattr(media_scanner, "embedded_subtitles", lambda *args, **kwargs: [])
+
+    result = media_scanner.inspect_media_file(video, "Persian")
+
+    assert result["skipped"] is None
+    assert result["item"]["source_subtitle_path"] == str(expected)
+
+
+def test_language_in_video_title_is_not_a_sidecar_language(tmp_path):
+    assert media_scanner.subtitle_language_from_name(tmp_path / "Movie.en.2026.srt", "Movie.en.2026") == "unknown"
+    assert media_scanner.normalize_language_code("english-commentary") == "unknown"
+
+
+def test_embedded_selection_prefers_full_default_track():
+    streams = [
+        {"index": 1, "language": "en", "forced": True},
+        {"index": 2, "language": "en", "comment": True},
+        {"index": 3, "language": "en", "default": False},
+        {"index": 4, "language": "en", "default": True},
+    ]
+    assert media_scanner.choose_embedded_subtitle(streams, ["en", "*"])["index"] == 4
+
+
+def test_fallback_output_preserves_distinct_unicode_folders(tmp_path):
+    first = media_scanner.safe_output_subfolder(tmp_path / "فیلم", tmp_path)
+    second = media_scanner.safe_output_subfolder(tmp_path / "سریال", tmp_path)
+    assert first != second
+    assert first == Path("فیلم")
+
+
 def test_external_priority_prefers_english(tmp_path, monkeypatch):
     video = touch(tmp_path / "Movie.mkv")
     en = touch(tmp_path / "Movie.en.srt")

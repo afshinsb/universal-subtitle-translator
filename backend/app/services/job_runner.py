@@ -31,6 +31,7 @@ from app.services.media_scanner import (
     TARGET_SUBTITLE_EXISTS_REASON,
     VIDEO_EXTENSIONS,
     inspect_media_file,
+    ensure_inside_media_root,
     scan_media_folder,
 )
 from app.services.translator import translate_batch
@@ -40,6 +41,7 @@ CANCELLED_BATCHES: set[str] = set()
 CANCELLED_JOBS: set[str] = set()
 ACTIVE_BATCHES: set[str] = set()
 ACTIVE_JOBS: set[str] = set()
+ACTIVE_OUTPUTS: set[Path] = set()
 ACTIVE_LOCK = threading.RLock()
 TERMINAL_STATUSES = {"done", "failed", "cancelled", "skipped", "interrupted"}
 BATCH_ALIGNMENT_ATTEMPTS = 2
@@ -76,6 +78,13 @@ def unregister_active_batch(batch_id: str) -> None:
 def active_runtime_ids() -> tuple[set[str], set[str]]:
     with ACTIVE_LOCK:
         return set(ACTIVE_JOBS), set(ACTIVE_BATCHES)
+
+
+def request_shutdown() -> None:
+    """Stop scheduling work and prevent late provider replies from saving files."""
+    with ACTIVE_LOCK:
+        CANCELLED_JOBS.update(ACTIVE_JOBS)
+        CANCELLED_BATCHES.update(ACTIVE_BATCHES)
 
 
 def active_runtime_counts() -> dict[str, int]:
@@ -165,6 +174,9 @@ def friendly_error_message(error: Exception | str) -> str:
     if "permission denied" in lowered or "access is denied" in lowered:
         return "The app does not have permission to read or write one of the required files."
 
+    # Provider exceptions can echo credentials or request headers.
+    if settings.openai_api_key:
+        text = text.replace(settings.openai_api_key, "[redacted]")
     return text
 
 
@@ -419,6 +431,7 @@ def validate_translation_alignment(batch: list[dict], result) -> dict:
     duplicate_indexes = sorted(set(result.duplicate_indexes or duplicate_values(returned_indexes)))
     missing_indexes = [index for index in expected_indexes if index not in returned_set]
     extra_indexes = [index for index in returned_indexes if index not in expected_set]
+    empty_indexes = [index for index in expected_indexes if not result.translations.get(index, "").strip()]
     unique_returned_in_order = []
 
     for index in returned_indexes:
@@ -434,6 +447,7 @@ def validate_translation_alignment(batch: list[dict], result) -> dict:
             and not expected_duplicate_indexes
             and not duplicate_indexes
             and not reordered
+            and not empty_indexes
             and result.malformed_block_count == 0
         ),
         "expected_indexes": expected_indexes,
@@ -443,6 +457,7 @@ def validate_translation_alignment(batch: list[dict], result) -> dict:
         "parsed_count": len(result.translations),
         "expected_duplicate_indexes": expected_duplicate_indexes,
         "missing_indexes": missing_indexes,
+        "empty_indexes": empty_indexes,
         "extra_indexes": extra_indexes,
         "duplicate_indexes": duplicate_indexes,
         "reordered": reordered,
@@ -457,7 +472,7 @@ def alignment_debug_message(report: dict) -> str:
         f"Counts: expected={report['expected_count']}, returned={report['returned_count']}, "
         f"parsed_unique={report['parsed_count']}. "
         f"Expected duplicates: {report['expected_duplicate_indexes']}. "
-        f"Missing: {report['missing_indexes']}. Extra: {report['extra_indexes']}. "
+        f"Missing: {report['missing_indexes']}. Empty: {report.get('empty_indexes', [])}. Extra: {report['extra_indexes']}. "
         f"Duplicates: {report['duplicate_indexes']}. "
         f"Malformed blocks: {report['malformed_block_count']}. "
         f"Reordered: {report['reordered']}."
@@ -589,7 +604,7 @@ def translate_batch_with_repair(
             f"{alignment_debug_message(report)}"
         )
 
-    translated = result.translations
+    translated = {index: text for index, text in result.translations.items() if text.strip()}
 
     missing_items = [item for item in batch if item["index"] not in translated]
 
@@ -715,9 +730,28 @@ def run_translation_job(
     batch_id: str | None = None,
 ) -> None:
     job_started_at = time.monotonic()
+    claimed_output = None
 
     try:
         check_cancelled(job_id=job_id, batch_id=batch_id)
+        path = Path(input_path)
+        output_filename = make_output_filename(input_filename, target_language)
+        if output_path_override:
+            output_path = Path(output_path_override)
+            output_filename = output_path.name
+        elif output_next_to_input:
+            output_path = path.with_name(output_filename)
+        else:
+            output_path = settings.output_dir / output_filename
+
+        if output_path.exists() and not overwrite_existing:
+            raise FileExistsError(f"Output already exists: {output_path}")
+        with ACTIVE_LOCK:
+            output_key = output_path.resolve()
+            if output_key in ACTIVE_OUTPUTS:
+                raise RuntimeError("This output is already being translated by another job.")
+            ACTIVE_OUTPUTS.add(output_key)
+            claimed_output = output_key
 
         add_log(
             job_id=job_id,
@@ -882,23 +916,13 @@ def run_translation_job(
                 f"Likely untranslated: {validation['likely_untranslated']} / {validation['non_empty']}."
             )
 
-        output_filename = make_output_filename(input_filename, target_language)
-
-        if output_path_override:
-            output_path = Path(output_path_override)
-            output_filename = output_path.name
-        elif output_next_to_input:
-            output_path = path.with_name(output_filename)
-        else:
-            output_path = settings.output_dir / output_filename
-
         if output_path.exists() and not overwrite_existing:
             raise RuntimeError(f"Output already exists: {output_path}")
 
         check_cancelled(job_id=job_id, batch_id=batch_id)
         update_job(job_id, message="Saving translated subtitle...")
 
-        write_srt(subs, output_path)
+        write_srt(subs, output_path, overwrite=overwrite_existing)
 
         final_message = "Translation completed."
 
@@ -952,6 +976,10 @@ def run_translation_job(
             message=f"{friendly_message} Failed after {elapsed_seconds(job_started_at)}s.",
             model=settings.openai_model,
         )
+    finally:
+        if claimed_output is not None:
+            with ACTIVE_LOCK:
+                ACTIVE_OUTPUTS.discard(claimed_output)
 
 
 def run_media_translation_job(
@@ -974,6 +1002,8 @@ def run_media_translation_job(
 
     try:
         check_cancelled(job_id=job_id, batch_id=batch_id)
+        if source_path.is_symlink() and source_kind == "embedded":
+            ensure_inside_media_root(source_path)
 
         source_bits = [
             f"{source_kind} subtitle selected",

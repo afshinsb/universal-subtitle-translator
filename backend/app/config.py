@@ -83,7 +83,7 @@ def parse_bool_env(name: str, default: bool = False) -> bool:
 
 class Settings:
     app_name: str = env_value("APP_NAME", "Universal Subtitle Translator") or "Universal Subtitle Translator"
-    app_version: str = env_value("APP_VERSION", "1.8.1") or "1.8.1"
+    app_version: str = env_value("APP_VERSION", "1.8.2") or "1.8.2"
     demo_mode: bool = parse_bool_env("DEMO_MODE", False)
     dev_mode: bool = parse_bool_env("DEV_MODE", True)
     app_host: str = env_value("APP_HOST", "0.0.0.0") or "0.0.0.0"
@@ -109,6 +109,7 @@ class Settings:
     admin_username: str = env_value("ADMIN_USERNAME", "admin") or "admin"
     admin_password: str | None = env_value("ADMIN_PASSWORD", "admin") or "admin"
     session_secret: str | None = env_value("SESSION_SECRET", DEFAULT_SESSION_SECRET) or DEFAULT_SESSION_SECRET
+    session_https_only: bool = parse_bool_env("SESSION_HTTPS_ONLY", False)
 
     data_dir: Path = Path(env_value("DATA_DIR", str(BASE_DIR / "data")) or str(BASE_DIR / "data"))
     upload_dir: Path = Path(env_value("UPLOAD_DIR", str(BASE_DIR / "data" / "uploads")) or str(BASE_DIR / "data" / "uploads"))
@@ -338,7 +339,7 @@ def auth_config_checks() -> list[dict]:
 
 def run_openai_api_key_test() -> None:
     api_key_ok, _, _, _ = openai_api_key_state()
-    model_raw = raw_setting("OPENAI_MODEL")
+    model_raw = settings.openai_model
 
     if not api_key_ok or model_raw in {None, ""} or is_placeholder(model_raw):
         OPENAI_API_TEST_RESULT.update(
@@ -354,11 +355,12 @@ def run_openai_api_key_test() -> None:
     try:
         from openai import OpenAI
 
-        client = OpenAI(
+        with OpenAI(
             api_key=settings.openai_api_key,
             timeout=min(max(settings.openai_timeout_seconds, 1), 10),
-        )
-        client.models.retrieve(settings.openai_model)
+            max_retries=0,
+        ) as client:
+            client.models.retrieve(settings.openai_model)
         OPENAI_API_TEST_RESULT.update(
             {
                 "status": "passed",
@@ -532,7 +534,7 @@ def config_status() -> dict:
             }
         )
 
-    model_raw = raw_setting("OPENAI_MODEL")
+    model_raw = settings.openai_model
     model_ok = model_raw not in {None, ""} and not is_placeholder(model_raw)
     checks.append(
         {
@@ -552,6 +554,7 @@ def config_status() -> dict:
             check_writable_path(settings.data_dir, "DATA_DIR", "Data folder"),
             check_writable_path(settings.upload_dir, "UPLOAD_DIR", "Upload folder"),
             check_writable_path(settings.output_dir, "OUTPUT_DIR", "Output folder"),
+            check_writable_path(settings.temp_dir, "TEMP_DIR", "Temp folder"),
             check_writable_path(settings.database_path, "DATABASE_PATH", "Database folder", directory=False),
             check_int_setting(
                 "SRT_BATCH_SIZE",
@@ -570,6 +573,16 @@ def config_status() -> dict:
             ),
         ]
     )
+
+    for name, value, minimum, maximum in (
+        ("APP_PORT", settings.app_port, 1, 65535),
+        ("FFMPEG_TIMEOUT_SECONDS", settings.ffmpeg_timeout_seconds, 1, 86400),
+        ("OPENAI_TIMEOUT_SECONDS", settings.openai_timeout_seconds, 1, 86400),
+        ("CANCEL_TIMEOUT_SECONDS", settings.cancel_timeout_seconds, 1, 86400),
+        ("MAX_UPLOAD_MB", settings.max_upload_mb, 1, 1048576),
+        ("BATCH_FILE_CONCURRENCY", settings.batch_file_concurrency, 1, 10),
+    ):
+        checks.append(check_int_setting(name, value, minimum=minimum, maximum=maximum))
 
     checks.append(
         {
