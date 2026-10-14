@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 import re
+from pathlib import Path
 
 import pytest
 
@@ -45,6 +46,27 @@ def test_complete_media_pipeline(tmp_path):
         pytest.skip("Install FFmpeg and ffprobe for the media smoke test.")
     from scripts.smoke import run_smoke
     assert run_smoke(tmp_path)["status"] == "passed"
+
+
+def test_standalone_smoke_with_container_directory_layout(tmp_path):
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("Install FFmpeg and ffprobe for the media smoke test.")
+    repository = Path(__file__).resolve().parents[2]
+    runtime = tmp_path / "runtime"
+    shutil.copytree(repository / "backend" / "app", runtime / "app",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    mounted_scripts = tmp_path / "smoke"
+    mounted_scripts.mkdir()
+    script = mounted_scripts / "smoke.py"
+    shutil.copyfile(repository / "scripts" / "smoke.py", script)
+
+    # Isolated mode excludes PYTHONPATH and the checkout from import resolution,
+    # just as running the mounted script cannot import /app implicitly in Docker.
+    result = subprocess.run([sys.executable, "-I", str(script)], cwd=runtime,
+                            capture_output=True, text=True, timeout=45)
+    assert result.returncode == 0, result.stderr
+    assert '"status": "passed"' in result.stdout
+    assert '"repeat": "skipped; output preserved"' in result.stdout
 
 
 def test_ffmpeg_timeout_terminates_child(monkeypatch):

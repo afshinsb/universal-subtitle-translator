@@ -87,6 +87,10 @@ if __name__ == "__main__":
     # Never load a real .env or use mounted application data or model credentials.
     os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     os.environ["OPENAI_API_KEY"] = ""
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+    checkout_backend = Path(__file__).resolve().parents[1] / "backend"
+    # In Docker this script is mounted separately at /smoke, while the image
+    # contains the application in its /app working directory.
+    app_root = checkout_backend if (checkout_backend / "app").is_dir() else Path.cwd()
+    sys.path.insert(0, str(app_root))
     with tempfile.TemporaryDirectory(prefix="ust-smoke-") as sandbox:
         print(json.dumps(run_smoke(Path(sandbox)), ensure_ascii=True))
