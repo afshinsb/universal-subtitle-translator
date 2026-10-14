@@ -124,6 +124,8 @@ new.chmod(0o700)
 def prepare(dest, revision):
     containers = json.loads((dest / 'containers.json').read_text())
     env = dict(v.split('=', 1) for v in containers[0]['Config']['Env'])
+    for key in ('PATH', 'LANG', 'GPG_KEY', 'PYTHON_VERSION', 'PYTHON_SHA256'):
+        env.pop(key, None)  # Preserve app settings, not the old image's interpreter path.
     if not env.get('OPENAI_API_KEY'):
         raise RuntimeError('Existing production provider key is missing.')
     env.update(APP_VERSION='1.8.2', DEV_MODE='false', DEMO_MODE='false', AUTH_ENABLED='true',

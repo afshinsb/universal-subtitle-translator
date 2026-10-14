@@ -85,10 +85,9 @@ does not claim to include uncheckpointed WAL changes.
    file/Portainer environment, never Git.
 6. Set provider explicitly to gpt-6-luna, OPENAI_REASONING_EFFORT=medium,
    OPENAI_MAX_COMPLETION_TOKENS=32768, standard tier under the budget guard.
-   Propose OPENAI_DAILY_BUDGET_USD=5, input ceiling 0.125/output 0.5 per million;
-   require approval for this daily allowance. The production provider-budget.sqlite
+   Set the authorized OPENAI_DAILY_BUDGET_USD=5, input ceiling 0.125/output 0.5 per million; The production provider-budget.sqlite
    belongs in its own new data directory, never the development pilot/comparison
-   ledgers. Keep one leased automatic translation, BATCH_FILE_CONCURRENCY=1.
+   ledgers. Use two leased automatic translations, four global API requests, two batches per file, one extraction and two inspections.
 7. Production automation config/queue must be new, empty and paused, with
    discovery_mode=events_only and selected_files initially empty. Do not import
    development queue rows, allowed fixture paths or integration token. Preserve
@@ -102,7 +101,7 @@ does not claim to include uncheckpointed WAL changes.
    authentication forwarding, 64KiB body limit, disabled access log and zero
    host-published gateway ports. Generate a new production UST integration token.
    No existing service container/network attachment needs changing.
-9. Suggested resource limits: backend 768MiB/1 CPU, frontend 128MiB, gateway64MiB;
+9. Suggested resource limits: backend 1024MiB/1.5 CPUs, frontend 128MiB, gateway64MiB;
    health checks, unless-stopped restart, bounded logs, non-root backend, dropped
    capabilities and no-new-privileges. Validate stack configuration without
    printing credentials. Deploy only this approved stack 14 replacement.
@@ -135,7 +134,28 @@ For newly produced Persian outputs, retain valid files by default. If rollback
 requires removing a pilot sidecar, match its recorded creation/hash and quarantine
 only that file, leaving all existing English/Persian/video files untouched.
 
-A database schema rehearsal is complete. The stopped-writer backup, full restore
-rehearsal, secure production credential verification, immutable release-image
-build and promotion itself remain to be executed AFTER approval. No production
-replacement has occurred.
+## Executed production rollout (October 14, 2026)
+
+The authorized 1.4.0 replacement has been executed. The original data remains
+untouched. Full backup, hash-verified extraction, SQLite/manual-history migration,
+preserved old image archives and isolated old-application startup rehearsal passed.
+Original backup: `/tank/share/ust-backups/20261014T223955Z` (private).
+New production runtime: `/opt/containers/ust-production`; production port 2288,
+development 2289 with independent data and paused automation.
+
+Subsequent immutable upgrades use `scripts/prime_update_release.py` after local
+checks and GitHub CI pass. Build sequentially from the exact clean main revision,
+using `ust-release-backend:<12-char revision>` and equivalent frontend tag.
+The update script takes a stopped-writer archive, verifies extraction/file hashes
+and SQLite integrity, preserves prior images/configuration, synchronizes stack14,
+and automatically restores the previous configuration if deployment health fails.
+It never rolls spending records back. Update backups live in timestamped
+`/tank/share/ust-backups/update-*` directories.
+
+Native Radarr/Sonarr notifications use the authenticated, internal production gateway.
+Bazarr uses the private relay and token under `/opt/containers/subtitle-scripts/ust`.
+Broken Radarr script ID1 is preserved but disabled. No legacy script was invoked.
+For active production use `events_only`, approved library roots, intake enabled and
+a fixed activation timestamp. Read-only history recovery starts at first hook
+activation, never historical library scanning. See `media-intake.md` and
+`download-guard.md` for independent preparation and optional cleanup controls.

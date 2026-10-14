@@ -939,11 +939,13 @@ def run_translation_job(
 
         if before_publish:
             before_publish()
-        with publication_guard() if publication_guard else nullcontext():
-            if preserve_cue_ids:
-                write_srt(subs, output_path, overwrite=overwrite_existing, add_credit=False)
-            else:
-                write_srt(subs, output_path, overwrite=overwrite_existing)
+        from app.services.resources import slot
+        with slot("publication", check_job):
+            with publication_guard() if publication_guard else nullcontext():
+                if preserve_cue_ids:
+                    write_srt(subs, output_path, overwrite=overwrite_existing, add_credit=False)
+                else:
+                    write_srt(subs, output_path, overwrite=overwrite_existing)
 
         final_message = "Translation completed."
 

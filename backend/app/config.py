@@ -128,6 +128,14 @@ class Settings:
     )
 
     automation_real_library_processing: bool = parse_bool_env("AUTOMATION_REAL_LIBRARY_PROCESSING", False)
+    download_guard_enabled: bool = parse_bool_env("DOWNLOAD_GUARD_ENABLED", False)
+    download_guard_root: Path | None = Path(env_value("DOWNLOAD_GUARD_ROOT")) if env_value("DOWNLOAD_GUARD_ROOT") else None
+    download_guard_qbit_root: str = env_value("DOWNLOAD_GUARD_QBIT_ROOT", "/downloads") or "/downloads"
+    media_intake_enabled: bool = parse_bool_env("MEDIA_INTAKE_ENABLED", False)
+    media_intake_activated_at: str | None = env_value("MEDIA_INTAKE_ACTIVATED_AT")
+    media_stability_seconds: int = parse_int_env("MEDIA_STABILITY_SECONDS", 10)
+    media_import_timeout_hours: int = parse_int_env("MEDIA_IMPORT_TIMEOUT_HOURS", 6)
+    media_download_stall_hours: int = parse_int_env("MEDIA_DOWNLOAD_STALL_HOURS", 12)
     automation_job_concurrency: int = parse_int_env("AUTOMATION_JOB_CONCURRENCY", 1)
     automation_api_concurrency: int = parse_int_env("AUTOMATION_API_CONCURRENCY", 4)
     automation_batch_concurrency: int = parse_int_env("AUTOMATION_BATCH_CONCURRENCY", 2)

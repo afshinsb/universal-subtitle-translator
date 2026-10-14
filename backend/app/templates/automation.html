@@ -60,12 +60,32 @@
         <p id="scan-result" role="status"></p>
     </section>
     <section class="panel">
-        <h2>Processing queue</h2>
-        <p>Active files: {{ counts.get('running', 0) }} / {{ resources.job_limit }} (maximum {{ resources.job_max }}).
-            API calls: {{ resources.active.get('api', 0) }} / {{ resources.api_limit }} (maximum {{ resources.api_max }}).
-            Extraction: {{ resources.active.get('extraction', 0) }} / 1.
-            Host available RAM: {{ resources.available_mb|round|int if resources.available_mb is not none else 'unknown' }} MiB.
-            CPU load: {{ resources.load|round(2) }}. Memory pressure: {{ resources.memory_pressure|round(2) }}%.</p>
+        <h2>Media intake / downloads</h2>
+        <p>Read-only upstream visibility. Download completion is not proof of import. UST does not repair or restart downloads. Optional Download Guard cleanup is separate.</p>
+        {% for service in intake.services %}{% if service.error %}<p role="alert">{{ service.service }}: {{ service.error }} (polling retries with backoff)</p>{% endif %}{% endfor %}
+        <div style="overflow-x:auto"><table><thead><tr><th>Title / identity</th><th>Download or import state</th><th>Progress</th><th>Destination / reason</th><th>Updated</th></tr></thead><tbody>
+        {% for item in intake.downloads %}<tr><td>{{ item.title }}<br>{{ item.service }} · {{ item.media_id }}</td><td>{{ item.state }}</td><td>{{ item.progress|round(1) if item.progress is not none else '—' }}%</td><td>{{ item.path }}<br>{{ item.error }}</td><td>{{ item.updated_at }}</td></tr>{% endfor %}
+        {% for item in intake.imports %}<tr><td>{{ item.title }}<br>{{ item.service }} · {{ item.media_ids }}</td><td>{{ item.translation_state or item.state }}</td><td>{{ 'Eligible' if item.queue_id else 'Persian preserved' if item.state == 'completed' else 'Not yet eligible' }}</td><td>{{ item.video_path }}<br>{{ item.error }}</td><td>{{ item.updated_at }}{% if item.state in ['invalid_media','preparation_failed','waiting_import','waiting_source','validation_pending'] %}<form method="post" action="/automation/intake/{{ item.id }}/retry"><button type="submit">Recheck imported file</button></form>{% endif %}</td></tr>{% endfor %}
+        </tbody></table></div>
+        <p>Import preparation: {% for state,count in intake.counts.items() %}{{ state }}: {{ count }} · {% endfor %}</p>
+    </section>
+    <section class="panel">
+        <h2>Download Guard</h2>
+        <p>{{ 'Enabled' if guard.enabled else 'Disabled' }} · {{ 'Strict automatic removal' if guard.auto_remove else 'Dry run' }} · Suspicious: {{ guard.suspicious_count }} · Removed: {{ guard.removed_count }} · Last scan: {{ guard.last_scan or 'Never' }}</p>
+        <p>Checks media download categories every five minutes. Mixed, incomplete and uncertain downloads are reported without removal.</p>
+        {% if guard.last_error %}<p role="alert">{{ guard.last_error }}</p>{% endif %}
+        <form method="post" action="/automation/download-guard/settings">
+            <label><input type="checkbox" name="enabled" value="true" {% if guard.enabled %}checked{% endif %}> Enabled</label>
+            <label><input type="checkbox" name="auto_remove" value="true" {% if guard.auto_remove %}checked{% endif %}> Auto-remove confirmed fake downloads</label>
+            <button type="submit">Save Download Guard</button>
+        </form>
+        <details><summary>Recent activity</summary><table><thead><tr><th>Time</th><th>Torrent</th><th>Action</th><th>Reason</th></tr></thead><tbody>
+        {% for item in guard.recent %}<tr><td>{{ item.timestamp }}</td><td>{{ item.name }}<br>{{ item.hash }}</td><td>{{ item.action }}</td><td>{{ item.reason }}</td></tr>{% endfor %}
+        </tbody></table></details>
+    </section>
+    <section class="panel">
+        <h2>Translation queue</h2>
+        <p>Active model: {{ active_model }} · reasoning {{ active_reasoning }}. Imported files waiting for English: {{ intake.counts.get('waiting_source', 0) }}.</p>
         <p>Daily spending guard: {{ 'enabled' if budget.enabled else 'not configured' }}.
             {% if budget.enabled %}Reserved USD {{ '%.4f'|format(budget.reserved_usd) }} of USD {{ '%.2f'|format(budget.limit_usd) }} (UTC).
             Reasoning tokens: {{ budget.reasoning_tokens }}. Confirmed usage USD {{ '%.4f'|format(budget.consumed_usd) }}; uncertain requests retain full reservations.{% endif %}</p>
@@ -91,6 +111,15 @@
         </table></div>
         <p>Refresh to see current status. Waiting for English subtitles does not consume translation retries.</p>
     </section>
+        <section class="panel"><h2>Processing resources</h2><p>Active files: {{ counts.get('running', 0) }} / {{ resources.job_limit }} (maximum {{ resources.job_max }}).
+            API calls: {{ resources.active.get('api', 0) }} / {{ resources.api_limit }} (maximum {{ resources.api_max }}).
+            Extraction: {{ resources.active.get('extraction', 0) }} / 1.
+            Host available RAM: {{ resources.available_mb|round|int if resources.available_mb is not none else 'unknown' }} MiB.
+            CPU load: {{ resources.load|round(2) }}. Memory pressure: {{ resources.memory_pressure|round(2) }}%.
+            Inspection: {{ resources.active.get('inspection', 0) }} / {{ resources.inspection_limit }}.
+            Publication: {{ resources.active.get('publication', 0) }} / {{ resources.publication_limit }}.
+            Jellyfin transcodes: {{ resources.active_transcodes }}.
+            Provider backoff: {{ 'active' if resources.rate_limit_backoff else 'clear' }}.</p></section>
     {% include "_footer.html" %}
 </main>
 <script>

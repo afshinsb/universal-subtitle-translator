@@ -20,6 +20,7 @@ def connection():
     conn = sqlite3.connect(settings.data_dir / 'resource-leases.sqlite', timeout=30)
     conn.execute('CREATE TABLE IF NOT EXISTS leases (id TEXT PRIMARY KEY, kind TEXT, expires REAL)')
     conn.execute('CREATE TABLE IF NOT EXISTS pressure (id INTEGER PRIMARY KEY, until REAL)')
+    conn.execute('CREATE TABLE IF NOT EXISTS transcodes (id INTEGER PRIMARY KEY, count INTEGER, expires REAL)')
     conn.commit()
     return conn
 
@@ -48,10 +49,15 @@ def limits():
     busy = (p['available_mb'] is not None and p['available_mb'] < settings.automation_min_available_mb) or (p['container_mb'] is not None and p['container_mb'] < 128) or p['memory_pressure'] > 1 or p['load'] > (os.cpu_count() or 1) * 1.5
     with connection() as conn:
         row = conn.execute('SELECT until FROM pressure WHERE id=1').fetchone()
+        transcoding = conn.execute('SELECT count FROM transcodes WHERE id=1 AND expires>?',(time.time(),)).fetchone()
     if busy or row and row[0] > time.time():
         hard, jobs = 1, 1
+    if transcoding and transcoding[0]:
+        jobs, hard = 1, min(hard, 2)
+    p['active_transcodes'] = transcoding[0] if transcoding else 0
+    p['rate_limit_backoff'] = bool(row and row[0] > time.time())
     p.update(api_limit=hard, job_limit=jobs, api_max=settings.automation_api_concurrency,
-             job_max=settings.automation_job_concurrency, extraction_limit=1)
+             job_max=settings.automation_job_concurrency, extraction_limit=1, inspection_limit=1 if busy or (transcoding and transcoding[0]) else 2, publication_limit=1)
     return p
 
 
@@ -67,7 +73,7 @@ def slot(kind, check=None):
     while True:
         if check:
             check()
-        cap = limits()['api_limit'] if kind == 'api' else 1
+        cap = limits()['api_limit'] if kind == 'api' else (limits()['inspection_limit'] if kind == 'inspection' else 1)
         with connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
             conn.execute('DELETE FROM leases WHERE expires<?', (time.time(),))
@@ -98,3 +104,8 @@ def status():
         rows = conn.execute('SELECT kind,COUNT(*) FROM leases WHERE expires>=? GROUP BY kind', (time.time(),)).fetchall()
     result['active'] = dict(rows)
     return result
+
+
+def set_transcodes(count):
+    with connection() as conn:
+        conn.execute('INSERT OR REPLACE INTO transcodes VALUES (1,?,?)', (count,time.time()+90))

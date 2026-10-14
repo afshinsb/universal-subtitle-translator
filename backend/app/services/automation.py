@@ -42,6 +42,8 @@ def init_schema():
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
         conn.execute("CREATE TABLE IF NOT EXISTS automation_job_history (job_id TEXT PRIMARY KEY,queue_id TEXT)")
         conn.execute("CREATE INDEX IF NOT EXISTS logs_retention ON logs(created_at)")
+        conn.execute("CREATE TABLE IF NOT EXISTS automation_fairness (id INTEGER PRIMARY KEY CHECK(id=1),origin TEXT,streak INTEGER)")
+        conn.execute("INSERT OR IGNORE INTO automation_fairness VALUES (1,'',0)")
         conn.execute("CREATE INDEX IF NOT EXISTS automation_due ON automation_queue(status, next_run)")
         root = settings.media_root / "fixtures" if settings.media_root else None
         config = {"enabled": False, "roots": [str(root)] if root and root.is_dir() else [],
@@ -170,7 +172,7 @@ def map_path(value):
 def signature(path):
     try:
         stat = path.stat()
-        return f"{stat.st_size}:{stat.st_mtime_ns}"
+        return f"{stat.st_dev}:{stat.st_ino}:{stat.st_size}:{stat.st_mtime_ns}"
     except FileNotFoundError:
         return ""
 
@@ -281,16 +283,20 @@ def claim(item_id=None):
             message='Recovered expired worker lease' WHERE status='running' AND lease_until<?""", (now,))
         if conn.execute("SELECT COUNT(*) FROM automation_queue WHERE status='running' AND lease_until>=?", (now,)).fetchone()[0] >= resources.limits()["job_limit"]:
             return None  # One automation translation across worker processes.
+        policy = conn.execute("SELECT origin,streak FROM automation_fairness WHERE id=1").fetchone()
+        preferred = 'radarr' if policy['origin'] == 'sonarr' else 'sonarr'
+        order = "CASE WHEN origin=? THEN 0 ELSE 1 END,created_at" if policy['streak'] >= 3 else "created_at"
         row = conn.execute("""SELECT * FROM automation_queue
             WHERE status IN ('queued','retry','waiting_media','waiting_source','waiting_config','waiting_budget')
-            AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY created_at LIMIT 1",
-            [now, item_id, item_id, *scope_args]).fetchone()
+            AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY " + order + " LIMIT 1",
+            [now, item_id, item_id, *scope_args, *([preferred] if policy["streak"] >= 3 else [])]).fetchone()
         if not row:
             return None
         if not permitted_file(row["video_path"]):
             # Excluded rows remain pending, without claiming or exhausting retries.
             return None
         owner = uuid4().hex
+        conn.execute("UPDATE automation_fairness SET origin=?,streak=? WHERE id=1",(row['origin'],policy['streak']+1 if row['origin']==policy['origin'] else 1))
         conn.execute("""UPDATE automation_queue SET status='running',owner=?,lease_until=?,
             updated_at=? WHERE id=?""", (owner, now + LEASE_SECONDS, utc_now(), row["id"]))
         return dict(conn.execute("SELECT * FROM automation_queue WHERE id=?", (row["id"],)).fetchone())
@@ -304,7 +310,7 @@ def finish(item, status, message, delay=0, **fields):
                      + " WHERE id=? AND owner=?", [*fields.values(), item["id"], item["owner"]])
 
 
-def select_source(video, item_id, streams=None):
+def select_source(video, item_id, streams=None, cancel_check=None):
     """Reuse proven sidecar-first English selection; exclude forced/commentary."""
     candidates = []
     for path in sidecar_subtitles(video.parent, video.stem):
@@ -317,7 +323,7 @@ def select_source(video, item_id, streams=None):
     duration = 0
     try:
         from app.services.ffmpeg_service import get_media_info
-        duration = float(get_media_info(video).get("format", {}).get("duration", 0))
+        duration = float(get_media_info(video, **({"cancel_check":cancel_check} if cancel_check else {})).get("format", {}).get("duration", 0))
     except (RuntimeError, ValueError, OSError):
         pass
     def usable(path):
@@ -348,7 +354,7 @@ def select_source(video, item_id, streams=None):
             directory.mkdir(parents=True, exist_ok=True)
             output = directory / (video.stem + ".en.srt")
             output.unlink(missing_ok=True)
-            extract_subtitle(video, output, stream_index=chosen["index"])
+            extract_subtitle(video, output, stream_index=chosen["index"], **({"cancel_check":cancel_check} if cancel_check else {}))
             if usable(output):
                 return output
     return None
@@ -393,7 +399,8 @@ def process(item):
     if any(stream["language"] in {"fa", "fas", "per"} or any(label in stream.get("title", "").lower() for label in {"persian", "farsi", "فارسی"}) for stream in streams):
         finish(item, "skipped", "Existing embedded Persian subtitle preserved")
         return
-    source = select_source(path, item["id"], streams)
+    from app.services.media_intake import cached_source
+    source = cached_source(path) or select_source(path, item["id"], streams)
     if source is None:
         finish(item, "waiting_source", "Waiting for English subtitles from Bazarr", WAIT_SECONDS)
         return

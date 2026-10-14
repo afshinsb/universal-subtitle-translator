@@ -13,7 +13,7 @@ from app.config import auth_config_checks, settings, ensure_directories, run_ope
 from app.database import init_db
 from app.routes import auth, jobs, files, settings as settings_routes, logs, batches, cleanup as cleanup_routes
 from app.services.job_runner import repair_stale_work, request_shutdown
-from app.services import automation
+from app.services import automation, media_intake, download_guard
 from app.routes import automation as automation_routes
 
 logger = logging.getLogger(__name__)
@@ -28,12 +28,18 @@ async def lifespan(app):
     init_db()
     repair_stale_work(reason="backend startup")
     automation.init_schema()
+    media_intake.init_schema()
+    download_guard.init_schema()
+    download_guard.worker.start()
+    media_intake.worker.start()
     automation.worker.start()
     try:
         yield
     finally:
         request_shutdown()
         automation.worker.stop()
+        media_intake.worker.stop()
+        download_guard.worker.stop()
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)

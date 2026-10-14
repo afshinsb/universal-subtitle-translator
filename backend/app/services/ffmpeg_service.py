@@ -84,7 +84,7 @@ def run_command(command, cancel_check=None):
     def check():
         if cancel_check and cancel_check():
             raise RuntimeError("Extraction cancelled.")
-    with slot("extraction", check):
+    with slot("inspection" if Path(command[0]).name == "ffprobe" else "extraction", check):
         return _run_command(command, cancel_check)
 
 
@@ -97,6 +97,7 @@ def get_media_info(video_path: Path, cancel_check: Callable[[], bool] | None = N
         "json",
         "-show_streams",
         "-show_format",
+        "-protocol_whitelist", "file,pipe",
         str(video_path.resolve()),
     ]
 
