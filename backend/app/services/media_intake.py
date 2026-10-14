@@ -131,6 +131,13 @@ def ingest(service, payload, path, origin='webhook'):
     with get_connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
         old = conn.execute('SELECT * FROM media_intake WHERE video_path=?',(str(path),)).fetchone()
+        if old:
+            previous=json.loads(old['media_ids'] or '{}')
+            ids={k:ids.get(k) if ids.get(k) is not None else previous.get(k) for k in ('item','file')}
+            # Missing fields in Rename/duplicate notifications cannot erase identity.
+            ids['episodes']=sorted({e for e in previous.get('episodes',[])+[e.get('id') for e in payload.get('episodes',[]) if isinstance(e,dict)] if isinstance(e,int)})
+            download=download or old['download_id']
+            title=media.get('title') or payload.get('sourceTitle') or old['title']
         item_id = old['id'] if old else uuid4().hex
         inserted = conn.execute('INSERT OR IGNORE INTO media_events VALUES (?,?,?,?)',(identity,item_id,service,utc_now())).rowcount
         if inserted:
@@ -248,7 +255,27 @@ def prepare_one():
             return True
         ids = json.loads(item['media_ids'] or '{}')
         if ids.get('file') and item['service'] in services():
-            file = api(item['service'],'api/v3/'+('moviefile/' if item['service']=='radarr' else 'episodefile/')+str(ids['file']))
+            try:
+                file = api(item['service'],'api/v3/'+('moviefile/' if item['service']=='radarr' else 'episodefile/')+str(ids['file']))
+            except urllib.error.HTTPError as exc:
+                if exc.code!=404 or not ids.get('item'):
+                    raise
+                # Out-of-order upgrade/import events may name an obsolete Arr file ID.
+                # Rebind only through the authoritative item and exact validated path.
+                if item['service']=='radarr':
+                    current=api('radarr','api/v3/movie/'+str(ids['item']))
+                    candidates=[current.get('movieFile') or {}]
+                    if candidates[0].get('relativePath') and not candidates[0].get('path'):
+                        candidates[0]['path']=str(Path(current['path'])/candidates[0]['relativePath'])
+                else:
+                    candidates=api('sonarr','api/v3/episodefile?seriesId='+str(ids['item']))
+                file=next((f for f in candidates if f.get('path') and automation.map_path(f['path'])==path),None)
+                if not file or not file.get('id'):
+                    update(item,'validation_pending','Obsolete Arr file ID; waiting for a current authoritative import',60)
+                    return True
+                ids['file']=file['id']
+                with get_connection() as conn:
+                    conn.execute('UPDATE media_intake SET media_ids=? WHERE id=? AND owner=?',(json.dumps(ids),item['id'],item['owner']))
             expected_key = 'movieId' if item['service']=='radarr' else 'seriesId'
             if ids.get('item') and file.get(expected_key) and ids['item']!=file[expected_key]:
                 update(item,'invalid_media','Arr file does not belong to the notified media identity')
@@ -295,7 +322,7 @@ def prepare_one():
             conn.execute("UPDATE automation_queue SET status='queued',next_run=0 WHERE id=? AND status='waiting_intake'",(queue['id'],))
         update(item,'queued',queue_id=queue['id'],source_path=str(source),source_hash=hashlib.sha256(source.read_bytes()).hexdigest(),attempts=0)
     except urllib.error.HTTPError as exc:
-        update(item,'superseded' if exc.code==404 else 'validation_pending','Arr file identity unavailable: HTTP '+str(exc.code),60)
+        update(item,'validation_pending','Arr file identity temporarily unavailable: HTTP '+str(exc.code),60)
     except (urllib.error.URLError,TimeoutError) as exc:
         update(item,'validation_pending','Authoritative Arr identity temporarily unavailable: '+str(exc),60)
     except Exception as exc:

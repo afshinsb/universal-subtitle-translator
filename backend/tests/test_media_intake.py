@@ -220,3 +220,33 @@ def test_arr_file_identity_recovers_moved_pending_import(library,monkeypatch):
     assert state(item)['video_path']==str(new)
     assert state(item)['state']=='validation_pending'
     assert automation.counts()=={}
+
+
+def test_minimal_duplicate_preserves_native_identity(library):
+    video=media(library)
+    item=intake.ingest('sonarr',{'series':{'id':17,'title':'Actual show'},'episodeFile':{'id':22},'downloadId':'hash','episodes':[{'id':7},{'id':8}]},video)
+    intake.ingest('sonarr',{'eventType':'Rename','episodeFile':{'path':str(video)}},video)
+    import json
+    row=state(item)
+    assert json.loads(row['media_ids'])=={'item':17,'file':22,'episodes':[7,8]}
+    assert row['download_id']=='hash' and row['title']=='Actual show'
+
+
+def test_out_of_order_obsolete_file_id_rebinds_current_authoritative_import(library,monkeypatch):
+    import json
+    import urllib.error
+    video=media(library)
+    video.with_suffix('.en.srt').write_text(ENGLISH)
+    item=intake.ingest('sonarr',{'series':{'id':17},'episodeFile':{'id':21}},video)
+    monkeypatch.setattr(intake,'services',lambda: {'sonarr':{}})
+    def api(service,route):
+        if route=='api/v3/episodefile/21':
+            raise urllib.error.HTTPError('http://sonarr',404,'obsolete',{},None)
+        assert route=='api/v3/episodefile?seriesId=17'
+        return [{'id':22,'seriesId':17,'path':str(video),'size':video.stat().st_size}]
+    monkeypatch.setattr(intake,'api',api)
+    intake.prepare_one()
+    intake.prepare_one()
+    assert state(item)['state']=='queued'
+    assert json.loads(state(item)['media_ids'])['file']==22
+    assert automation.counts()=={'queued':1}
