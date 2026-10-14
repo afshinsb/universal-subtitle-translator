@@ -1,4 +1,7 @@
-# Final automatic media integration — prepared, not activated
+# Final automatic media integration — controlled pilot complete, hooks inactive
+
+The approved single-movie pilot is complete. See [coyote-pilot-results.md](coyote-pilot-results.md).
+Production promotion and live hook activation remain separately gated.
 
 Prepared on Prime, 2026-10-14. Development uses main, GPT-6 Luna Medium,
 32768 completion tokens, source hot reload and loopback port 2289.

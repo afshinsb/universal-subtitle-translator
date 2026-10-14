@@ -165,7 +165,13 @@ def write_srt(subs, path: Path, *, overwrite: bool = True, add_credit: bool = Tr
         temp_path.unlink(missing_ok=True)
 
 
+def repair_persian_italic_markup(text: str) -> str:
+    """Restore a missing tag delimiter without changing Persian dialogue."""
+    return re.sub(r"<(i|b|u)(?=[\u0600-\u06ff])", r"<\1>", text)
+
+
 def clean_subtitle_text(text: str) -> str:
+    text = repair_persian_italic_markup(text)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
@@ -305,6 +311,7 @@ def split_spaced_line(line: str, limit: int) -> list[str]:
 
 
 def wrap_subtitle_text(text: str, language: str | None = None) -> str:
+    text = repair_persian_italic_markup(text)
     tags = {}
 
     def protect_tag(match):

@@ -535,3 +535,26 @@ def test_new_import_library_scope_cannot_be_changed_to_historical_scan(library):
         automation.save_config(True, [str(library)], {}, "reconcile_libraries")
     assert automation.config()["enabled"] is False
     assert automation.config()["discovery_mode"] == "events_only"
+
+
+def test_missing_italic_delimiter_is_repaired_before_publication(library, monkeypatch):
+    video = media(library)
+    video.with_suffix(".en.srt").write_text(ENGLISH)
+    def request(req):
+        prompt = json.loads(req.content)["messages"][-1]["content"]
+        indexes = re.findall(r"BEGIN\[(\d+)\]\n", prompt)
+        text = "\n".join(f"BEGIN[{idx}]\n<iسلام دنیا</i>\nEND[{idx}]" for idx in indexes)
+        return httpx.Response(200, json={"id": "mock-markup", "object": "chat.completion",
+            "created": 0, "model": "fixture", "choices": [{"index": 0,
+            "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}]})
+    monkeypatch.setattr(settings, "openai_api_key", "sk-fixture-only")
+    monkeypatch.setattr(translator, "get_openai_client", lambda: OpenAI(
+        api_key="sk-fixture-only", max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(request))))
+    item = automation.enqueue(str(video))
+    automation.process_one()
+    assert queued(item)["status"] == "done"
+    cues = read_srt(video.with_suffix(".fa.srt"))
+    assert len(cues) == 2
+    assert all(c.text.count("<i>") == c.text.count("</i>") == 1 and "سلام" in c.text for c in cues)
+    assert [(c.index, c.start.ordinal, c.end.ordinal) for c in cues] == [(7,2125,3250),(12,4375,5500)]
