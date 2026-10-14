@@ -128,6 +128,11 @@ class Settings:
     )
 
     automation_real_library_processing: bool = parse_bool_env("AUTOMATION_REAL_LIBRARY_PROCESSING", False)
+    automation_job_concurrency: int = parse_int_env("AUTOMATION_JOB_CONCURRENCY", 1)
+    automation_api_concurrency: int = parse_int_env("AUTOMATION_API_CONCURRENCY", 4)
+    automation_batch_concurrency: int = parse_int_env("AUTOMATION_BATCH_CONCURRENCY", 2)
+    automation_min_available_mb: int = parse_int_env("AUTOMATION_MIN_AVAILABLE_MB", 768)
+    automation_initial_completion_tokens: int = parse_int_env("AUTOMATION_INITIAL_COMPLETION_TOKENS", 16384)
     automation_context_gap_seconds: int = parse_int_env("AUTOMATION_CONTEXT_GAP_SECONDS", 15)
 
     automation_allow_library_writes: bool = parse_bool_env("AUTOMATION_ALLOW_LIBRARY_WRITES", False)

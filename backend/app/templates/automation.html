@@ -61,9 +61,14 @@
     </section>
     <section class="panel">
         <h2>Processing queue</h2>
+        <p>Active files: {{ counts.get('running', 0) }} / {{ resources.job_limit }} (maximum {{ resources.job_max }}).
+            API calls: {{ resources.active.get('api', 0) }} / {{ resources.api_limit }} (maximum {{ resources.api_max }}).
+            Extraction: {{ resources.active.get('extraction', 0) }} / 1.
+            Host available RAM: {{ resources.available_mb|round|int if resources.available_mb is not none else 'unknown' }} MiB.
+            CPU load: {{ resources.load|round(2) }}. Memory pressure: {{ resources.memory_pressure|round(2) }}%.</p>
         <p>Daily spending guard: {{ 'enabled' if budget.enabled else 'not configured' }}.
             {% if budget.enabled %}Reserved USD {{ '%.4f'|format(budget.reserved_usd) }} of USD {{ '%.2f'|format(budget.limit_usd) }} (UTC).
-            Reasoning tokens: {{ budget.reasoning_tokens }}. Reservations include failed requests and are never refunded.{% endif %}</p>
+            Reasoning tokens: {{ budget.reasoning_tokens }}. Confirmed usage USD {{ '%.4f'|format(budget.consumed_usd) }}; uncertain requests retain full reservations.{% endif %}</p>
         {% if counts.get('failed', 0) %}<p role="alert">{{ counts.failed }} translation(s) need review. See details and retry below.</p>{% endif %}
         {% if counts.get('waiting_budget', 0) %}<p role="alert">Spending limit reached. Pending translations resume next UTC day.</p>{% endif %}
         <p>{% for state, count in counts.items() %}{{ state }}: {{ count }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
@@ -71,9 +76,16 @@
             <thead><tr><th>Media</th><th>Status</th><th>Attempts</th><th>Details</th><th>Action</th></tr></thead>
             <tbody>{% for item in queue %}<tr>
                 <td>{{ item.video_path }}</td><td>{{ item.status }}</td><td>{{ item.attempts }}</td>
-                <td>{{ item.message }}{% if item.job_id %}<br><a href="/jobs/{{ item.job_id }}">Translation details</a>{% endif %}</td>
+                <td>{{ item.message }}<br>{{ item.detail }}
+                {% if item.queue_position %}Queue position {{ item.queue_position }}. {% endif %}
+                {{ item.progress }}% · USD {{ '%.5f'|format(item.cost_usd) }}
+                {% if item.eta_seconds %} · Estimated remaining {{ item.eta_seconds }} seconds{% endif %}
+                {% if item.job_id %}<br><a href="/jobs/{{ item.job_id }}">Translation details</a>{% endif %}</td>
                 <td>{% if item.status not in ['running','done','skipped'] %}
                     <form method="post" action="/automation/queue/{{ item.id }}/retry"><button type="submit">Retry</button></form>
+                    {% endif %}
+                    {% if item.status not in ['done','skipped','cancelled'] %}
+                    <form method="post" action="/automation/queue/{{ item.id }}/cancel"><button type="submit">Cancel</button></form>
                     {% endif %}</td>
             </tr>{% else %}<tr><td colspan="5">No imported media queued yet.</td></tr>{% endfor %}</tbody>
         </table></div>

@@ -12,7 +12,9 @@ RUN pip install --no-cache-dir pip==26.2.1 setuptools==84.0.0 wheel==0.48.0 pack
 FROM python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 
 ARG APP_VERSION=1.8.2
-LABEL org.opencontainers.image.title="Universal Subtitle Translator backend" \
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="Universal Subtitle Translator backend" \
       org.opencontainers.image.version="${APP_VERSION}" \
       org.opencontainers.image.source="https://github.com/afshinsb/universal-subtitle-translator"
 

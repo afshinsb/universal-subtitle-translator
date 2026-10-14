@@ -30,11 +30,12 @@ def test_medium_reservations_atomic_restart_safe_and_reasoning_usage(daily):
     daily_budget.record_usage(reservations[0], SimpleNamespace(prompt_tokens=10,
         completion_tokens=100, completion_tokens_details=SimpleNamespace(reasoning_tokens=80)))
     # Unanswered calls retain their full reservations; reopening the ledger does not reset.
+    daily_budget.reserve_daily("gpt-6-luna", "hello", daily)
     with pytest.raises(daily_budget.DailyBudgetExceeded):
         daily_budget.reserve_daily("gpt-6-luna", "hello", daily)
     status = daily_budget.status()
     assert 0.049 < status["reserved_usd"] < 0.05
-    assert status["reasoning_tokens"] == 80 and status["requests"] == 3
+    assert status["reasoning_tokens"] == 80 and status["requests"] == 4
     with sqlite3.connect(daily_budget.ledger_path()) as conn:
         assert conn.execute("SELECT output_tokens FROM provider_reservations WHERE id=?", (reservations[0],)).fetchone()[0] == 100
 

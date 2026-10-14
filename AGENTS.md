@@ -32,3 +32,12 @@ Integration preparation: ust-dev-events may join existing service networks as
 an internal gateway with no published ports. Do not change service hooks or
 attach/recreate existing services. Real-library processing is disabled by
 AUTOMATION_REAL_LIBRARY_PROCESSING=false; preserve that gate until approval.
+
+## Authorized final rollout (2026-10-14)
+The user's final mission supersedes the earlier production/hook restrictions:
+upgrade Production, preserve and back up stack 14 and original data, enable
+Radarr/Sonarr/Bazarr authenticated integrations, and leave production events-only
+automation enabled with GPT-6 Luna Medium and a persistent USD 5/day guard.
+Development remains independent and paused. No historical library backfill,
+no overwrite of subtitles, no broad permission changes, no unrelated service
+changes, no Docker pruning. Preserve rollback images and private verified backups.

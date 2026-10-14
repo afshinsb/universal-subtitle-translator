@@ -30,7 +30,7 @@ def stop_process(process: subprocess.Popen, terminate: bool = True) -> None:
             pass
 
 
-def run_command(
+def _run_command(
     command: list[str],
     cancel_check: Callable[[], bool] | None = None,
 ) -> subprocess.CompletedProcess:
@@ -78,6 +78,16 @@ def run_command(
             process.stderr.close()
 
 
+
+def run_command(command, cancel_check=None):
+    from app.services.resources import slot
+    def check():
+        if cancel_check and cancel_check():
+            raise RuntimeError("Extraction cancelled.")
+    with slot("extraction", check):
+        return _run_command(command, cancel_check)
+
+
 def get_media_info(video_path: Path, cancel_check: Callable[[], bool] | None = None) -> dict:
     command = [
         "ffprobe",
@@ -86,6 +96,7 @@ def get_media_info(video_path: Path, cancel_check: Callable[[], bool] | None = N
         "-print_format",
         "json",
         "-show_streams",
+        "-show_format",
         str(video_path.resolve()),
     ]
 

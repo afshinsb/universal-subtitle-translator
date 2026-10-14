@@ -1,10 +1,13 @@
 """Persistent single-worker automation. No service hooks are configured here."""
 import json
+import hashlib
 import logging
 import os
 import secrets
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from app.services import resources, daily_budget
 from pathlib import Path
 from uuid import uuid4
 
@@ -18,7 +21,7 @@ from app.services.daily_budget import DailyBudgetExceeded, retry_delay
 from app.services.job_runner import run_translation_job, register_active_job, unregister_active_job, cancel_job
 
 logger = logging.getLogger(__name__)
-LEASE_SECONDS = 90
+LEASE_SECONDS = 300
 RETRY_LIMIT = 5
 WAIT_SECONDS = 60
 
@@ -206,8 +209,20 @@ def accepts_subtitle_event(path):
 
 def list_queue(limit=200):
     with get_connection() as conn:
-        return [dict(row) for row in conn.execute(
-            "SELECT * FROM automation_queue ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()]
+        rows = [dict(row) for row in conn.execute(
+            "SELECT * FROM automation_queue ORDER BY created_at DESC LIMIT ?", (min(limit, 10000),)).fetchall()]
+        positions = {row[0]: index for index, row in enumerate(conn.execute(
+            "SELECT id FROM automation_queue WHERE status='queued' ORDER BY created_at LIMIT 10000"), 1)}
+    for row in rows:
+        job = get_job(row["job_id"]) if row["job_id"] else None
+        row["progress"] = job.get("progress_percent", 0) if job else 0
+        row["detail"] = job.get("message", "") if job else ""
+        row["queue_position"] = positions.get(row["id"])
+        row.update(daily_budget.file_usage(row["id"]))
+        done = job.get("translated_count", 0) if job else 0
+        total = job.get("total_subtitles", 0) if job else 0
+        row["eta_seconds"] = round(row["latency"] * (total - done) / done / max(1, settings.automation_batch_concurrency)) if done and total > done else None
+    return rows
 
 
 def counts():
@@ -225,6 +240,18 @@ def retry(item_id):
         conn.execute("""UPDATE automation_queue SET status='queued',attempts=0,next_run=0,
             message='Retry requested', updated_at=? WHERE id=? AND status NOT IN ('running','done','skipped')""",
             (utc_now(), item_id))
+
+
+
+def cancel(item_id):
+    with get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT status,job_id FROM automation_queue WHERE id=?", (item_id,)).fetchone()
+        if not row or row["status"] in {"done", "skipped"}:
+            raise ValueError("Completed/missing items cannot be cancelled.")
+        conn.execute("UPDATE automation_queue SET status='cancelled',owner=NULL,lease_until=0,message='Cancelled by operator' WHERE id=?", (item_id,))
+    if row["job_id"]:
+        cancel_job(row["job_id"])
 
 
 def claim(item_id=None):
@@ -248,11 +275,11 @@ def claim(item_id=None):
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("""UPDATE automation_queue SET status='queued',owner=NULL,
             message='Recovered expired worker lease' WHERE status='running' AND lease_until<?""", (now,))
-        if conn.execute("SELECT COUNT(*) FROM automation_queue WHERE status='running' AND lease_until>=?", (now,)).fetchone()[0]:
+        if conn.execute("SELECT COUNT(*) FROM automation_queue WHERE status='running' AND lease_until>=?", (now,)).fetchone()[0] >= resources.limits()["job_limit"]:
             return None  # One automation translation across worker processes.
         row = conn.execute("""SELECT * FROM automation_queue
             WHERE status IN ('queued','retry','waiting_media','waiting_source','waiting_config','waiting_budget')
-            AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY next_run,created_at LIMIT 1",
+            AND next_run<=? AND (? IS NULL OR id=?)""" + scope_sql + " ORDER BY created_at LIMIT 1",
             [now, item_id, item_id, *scope_args]).fetchone()
         if not row:
             return None
@@ -283,23 +310,44 @@ def select_source(video, item_id, streams=None):
         if any(flag in {"forced", "comment", "commentary"} for flag in flags):
             continue
         candidates.append((any(flag in {"hi", "sdh", "cc"} for flag in flags), str(path), path))
-    for _, _, path in sorted(candidates):
+    duration = 0
+    try:
+        from app.services.ffmpeg_service import get_media_info
+        duration = float(get_media_info(video).get("format", {}).get("duration", 0))
+    except (RuntimeError, ValueError, OSError):
+        pass
+    def usable(path):
         try:
-            if any(cue.text.strip() for cue in read_srt(path)):
-                return path
+            cues = read_srt(path)
+            if not cues or any(not cue.text.strip() for cue in cues):
+                return False
+            if duration >= 600:
+                # Reject opening-only/truncated sources; short fixture clips are exempt.
+                if cues[-1].end.ordinal / 1000 < duration * .6:
+                    return False
+            from app.services.language_detector import detect_subtitle_language
+            language = detect_subtitle_language(cues)
+            return language in {"Unknown", "English"}
         except RuntimeError:
-            logger.warning("English sidecar is incomplete; waiting for another candidate.")
+            return False
+
     streams = [stream for stream in (streams if streams is not None else list_subtitle_streams(video))
                if stream.get("text", True) and stream["language"] in {"eng", "en"} and not stream["forced"] and not stream["comment"]]
-    if not streams:
-        return None
-    chosen = sorted(streams, key=lambda stream: (bool(stream.get("hearing_impaired")), not stream["default"], stream["index"]))[0]
-    directory = settings.temp_dir / "automation" / item_id
-    directory.mkdir(parents=True, exist_ok=True)
-    output = directory / (video.stem + ".en.srt")
-    output.unlink(missing_ok=True)
-    extract_subtitle(video, output, stream_index=chosen["index"])
-    return output
+    for impaired in (False, True):
+        for hi, _, path in sorted(candidates):
+            if hi == impaired and usable(path):
+                return path
+        for chosen in sorted(streams, key=lambda stream: (not stream["default"], stream["index"])):
+            if bool(chosen.get("hearing_impaired")) != impaired:
+                continue
+            directory = settings.temp_dir / "automation" / item_id
+            directory.mkdir(parents=True, exist_ok=True)
+            output = directory / (video.stem + ".en.srt")
+            output.unlink(missing_ok=True)
+            extract_subtitle(video, output, stream_index=chosen["index"])
+            if usable(output):
+                return output
+    return None
 
 
 def existing_persian_sidecar(video):
@@ -348,6 +396,7 @@ def process(item):
     if not settings.openai_api_key:
         finish(item, "waiting_config", "Provider key is not configured; no request made", WAIT_SECONDS)
         return
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     attempt = item["attempts"] + 1
     job_id = uuid4().hex
     with get_connection() as conn:
@@ -359,6 +408,8 @@ def process(item):
         if not config()["enabled"] or not permitted_file(path):
             raise RuntimeError("Automation paused or processing scope changed.")
         checked_path(str(path))
+        if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
+            raise RuntimeError("English subtitles changed during translation.")
         if signature(path) != item["signature"]:
             raise RuntimeError("Media changed during translation; review imported file.")
         if existing_persian_sidecar(path):
@@ -373,7 +424,7 @@ def process(item):
     try:
         with pilot_scope(path, source):
             run_translation_job(job_id, str(source), source.name, "Persian", "natural_conversational",
-                                output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish)
+                                output_path_override=str(output), overwrite_existing=False, preserve_cue_ids=True, before_publish=before_publish, check_automation=before_publish, checkpoint_media_id=item["id"])
     finally:
         unregister_active_job(job_id)
     job = get_job(job_id)
@@ -456,17 +507,23 @@ class Worker:
 
     def run(self):
         next_scan = 0
-        while not self.stop_event.is_set():
-            try:
-                if config()["enabled"]:
-                    if time.time() >= next_scan:
-                        reconcile()
-                        next_scan = time.time() + WAIT_SECONDS
-                    if process_one():
-                        continue
-            except Exception:
-                logger.exception("Automation worker error; retrying after polling delay")
-            self.stop_event.wait(2)
+        futures = set()
+        with ThreadPoolExecutor(max_workers=max(1, min(settings.automation_job_concurrency, 4))) as pool:
+            while not self.stop_event.is_set():
+                try:
+                    for future in list(futures):
+                        if future.done():
+                            future.result()
+                            futures.remove(future)
+                    if config()["enabled"]:
+                        if time.time() >= next_scan:
+                            reconcile()
+                            next_scan = time.time() + WAIT_SECONDS
+                        if len(futures) < resources.limits()["job_limit"]:
+                            futures.add(pool.submit(process_one))
+                except Exception:
+                    logger.exception("Automation worker error; retrying after polling delay")
+                self.stop_event.wait(.5)
 
     def stop(self):
         self.stop_event.set()

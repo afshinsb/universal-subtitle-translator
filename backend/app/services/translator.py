@@ -8,6 +8,8 @@ from openai import OpenAI
 
 from app.services.pilot_budget import SYSTEM_PROMPT, reserve_request, record_response
 from app.services.daily_budget import reserve_daily, record_usage
+from app.services import resources
+from app.services.durable_batches import CompletionTruncated
 from app.config import settings
 from app.models import LANGUAGE_CODES, has_persian_characters, is_persian_language, normalize_language
 
@@ -330,7 +332,7 @@ def provider_request_options() -> dict:
     if settings.openai_max_completion_tokens < 0:
         raise RuntimeError("OPENAI_MAX_COMPLETION_TOKENS must be non-negative.")
     if settings.openai_max_completion_tokens:
-        options["max_completion_tokens"] = settings.openai_max_completion_tokens
+        options["max_completion_tokens"] = resources.completion_cap.get() or settings.openai_max_completion_tokens
     return options
 
 
@@ -347,7 +349,8 @@ def call_openai(prompt: str) -> TranslationResult:
         request_client = client.with_options(max_retries=0) if guarded or reservation else client
         started = time.monotonic()
         try:
-            response = request_client.chat.completions.create(
+            with resources.slot("api"):
+                response = request_client.chat.completions.create(
                 model=settings.openai_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -360,7 +363,9 @@ def call_openai(prompt: str) -> TranslationResult:
             raise
         record_response(response, time.monotonic() - started)
 
-    record_usage(reservation, getattr(response, "usage", None))
+    record_usage(reservation, getattr(response, "usage", None), time.monotonic() - started)
+    if response.choices and getattr(response.choices[0], "finish_reason", None) == "length":
+        raise CompletionTruncated("Completion token cap reached; retain usage and retry with full reasoning allowance.")
     if not response.choices:
         raise RuntimeError("The translation provider returned no choices.")
 

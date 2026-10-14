@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import automation, daily_budget
+from app.services import automation, daily_budget, resources
 from app.template_context import configure_templates
 
 router = APIRouter(prefix="/automation")
@@ -25,7 +25,7 @@ def check_origin(request):
 def dashboard(request: Request):
     cfg = automation.config()
     return templates.TemplateResponse(request=request, name="automation.html", context={
-        "config": cfg, "queue": automation.list_queue(), "counts": automation.counts(),
+        "resources": resources.status(), "config": cfg, "queue": automation.list_queue(), "counts": automation.counts(),
         "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(),
         "roots_text": "\n".join(cfg["roots"]),
         "allowed_files_text": "\n".join(cfg.get("allowed_files", [])),
@@ -37,7 +37,7 @@ def dashboard(request: Request):
 def status():
     cfg = automation.config()
     return {"enabled": cfg["enabled"], "roots": cfg["roots"], "scope_mode": cfg.get("scope_mode", "libraries"), "allowed_files": cfg.get("allowed_files", []), "counts": automation.counts(),
-            "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(), "discovery_mode": cfg.get("discovery_mode", "reconcile_libraries"), "queue": automation.list_queue()}
+            "resources": resources.status(), "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(), "discovery_mode": cfg.get("discovery_mode", "reconcile_libraries"), "queue": automation.list_queue()}
 
 
 @router.post("/settings")
@@ -83,6 +83,16 @@ def retry(request: Request, item_id: str):
     check_origin(request)
     try:
         automation.retry(item_id)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return RedirectResponse("/automation", status_code=303)
+
+
+@router.post("/queue/{item_id}/cancel")
+def cancel(request: Request, item_id: str):
+    check_origin(request)
+    try:
+        automation.cancel(item_id)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return RedirectResponse("/automation", status_code=303)

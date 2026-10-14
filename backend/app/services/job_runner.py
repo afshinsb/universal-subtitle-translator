@@ -731,6 +731,7 @@ def run_translation_job(
     preserve_cue_ids: bool = False,
     before_publish=None,
     check_automation=None,
+    checkpoint_media_id=None,
 ) -> None:
     def check_job():
         if check_automation:
@@ -831,25 +832,22 @@ def run_translation_job(
 
         translated_count = 0
 
-        for batch_number, batch in enumerate(batches, start=1):
+        def translate(number, batch):
             check_job()
+            update_job(job_id, message=f"Translating batch {number} of {len(batches)}...")
+            return translate_batch_with_repair(
+                job_id=job_id, batch=batch, source_language=detected_source_language,
+                target_language=target_language, style=style, batch_number=number,
+                batch_count=len(batches), cancel_check=check_job)
 
-            update_job(
-                job_id,
-                message=f"Translating batch {batch_number} of {len(batches)}...",
-            )
-
-            translated = translate_batch_with_repair(
-                job_id=job_id,
-                batch=batch,
-                source_language=detected_source_language,
-                target_language=target_language,
-                style=style,
-                batch_number=batch_number,
-                batch_count=len(batches),
-                cancel_check=lambda: check_job(),
-            )
-
+        if checkpoint_media_id:
+            from app.services import durable_batches
+            key = durable_batches.identity(input_path, settings.openai_model, style)
+            translated_batches = durable_batches.run(batches, translate, check_job, key, checkpoint_media_id)
+        else:
+            translated_batches = ((number, batch, translate(number, batch))
+                                  for number, batch in enumerate(batches, 1))
+        for batch_number, batch, translated in translated_batches:
             check_job()
 
             for item in batch:

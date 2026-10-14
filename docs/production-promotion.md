@@ -1,9 +1,32 @@
-# Production promotion and rollback — approval required
+# Production promotion and rollback — execution authorized
 
-This document is a plan, not a deployment command. First pass the separate
-single-movie development pilot in final-automation-activation.md.
-Never start the release Compose files from the development checkout on Prime:
-their hard-coded container names belong to production.
+The final rollout authorization supersedes earlier approval gates in this document.
+The Coyote pilot succeeded. Production promotion, authenticated Radarr/Sonarr/Bazarr
+hooks and events-only ongoing translation are now authorized with USD 5/day.
+Use `scripts/prime_promote.py` from verified main: backup, prepare with immutable
+release revision, deploy with automatic rollback on health failure. Private runtime
+artifacts live under `/tank/share/ust-backups/<UTC timestamp>` and
+`/opt/containers/ust-production`; never commit them.
+
+Portainer stack 14 retains its metadata and Compose project identity. Its Compose
+file is updated inside its volume; host Compose performs the scoped replacement
+using the same project and production names. No Portainer authentication reset is
+needed. The original data tree remains the rollback source. Full stopped-writer
+archives, restored file hashes, SQLite integrity, container/environment snapshots,
+Portainer database/stack definitions and saved image archives are verified first.
+
+Current scheduler/budget/resource procedure is in queue-and-capacity.md. Production
+starts paused with empty scope for acceptance, then uses Movies/Shows event-only
+scope and remains enabled. Development stays paused, isolated on 2289. Production
+uses 1024 MiB/1.5 CPUs, two active files, one extraction, four global API requests,
+two batches/file, with pressure-aware reductions. No source mounts/hot reload in
+production. Daily requests reserve worst-case cost and settle confirmed usage;
+uncertain requests retain their bounds. Immutable image revision labels identify
+release code. The existing secure production login and provider credential are
+preserved; the webhook token, queue, checkpoints and ledger are independent.
+
+The following original preparation record explains the backup/migration rationale;
+its old references to separate approval are superseded by the authorization above.
 
 ## Current production evidence
 
