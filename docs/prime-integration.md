@@ -27,9 +27,13 @@ Existing write-enabled development mounts remain as previously authorized.
 Read-only checks hashed 5 movie and 92 show Persian sidecars for preservation.
 
 Jellyfin is a consumer of sidecars, not an import-event producer for this
-pipeline. Verify native real-time monitoring for the selected library during
-activation, or perform an explicitly approved library refresh afterward.
-No authenticated Jellyfin library configuration was inspected or changed;
+pipeline. Read-only options.xml inspection verified EnableRealtimeMonitor=true
+for Movies at /tank/share/Media/Movies and Shows at /tank/share/Media/Shows.
+os.path.samefile verified that both capitalized paths identify the same
+directories as the lower-case service mounts; no path repair is needed.
+Verify actual sidecar discovery during the pilot, or perform an explicitly
+approved library refresh afterward.
+No authenticated Jellyfin library API configuration was inspected or changed;
 provide a dedicated API token only if an API refresh is chosen. No refresh
 POST or playback operation was performed here.
 
@@ -230,8 +234,7 @@ No actual hook has been changed. No production translator deployed.
 Real-library automation is paused and blocked by a deployment gate.
 Approval is still needed for the specific pilot movie, legacy-hook exclusion,
 provider spend, eventual hook configuration, and production promotion.
-Authenticated Jellyfin library monitoring/refresh behavior still needs operator
-verification. Cron/systemd configuration inspection found no legacy references;
+Jellyfin real-time monitoring configuration is verified; actual sidecar discovery\nand authenticated refresh behavior still need operator verification during the pilot. Cron/systemd configuration inspection found no legacy references;
 manual/external invocation of the legacy wrapper must remain excluded.
 
 Primary references:
