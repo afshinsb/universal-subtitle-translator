@@ -315,6 +315,23 @@ def parse_translated_block_text(text: str) -> dict[int, str]:
     return parse_translated_blocks(text).translations
 
 
+def provider_request_options() -> dict:
+    """Explicit reasoning omits sampling parameters; preserve legacy defaults."""
+    options = {}
+    effort = settings.openai_reasoning_effort
+    if effort:
+        if effort not in {"none", "low", "medium", "high", "xhigh", "max", "minimal"}:
+            raise RuntimeError("Invalid OPENAI_REASONING_EFFORT.")
+        options["reasoning_effort"] = effort
+    else:
+        options["temperature"] = 0.1
+    if settings.openai_max_completion_tokens < 0:
+        raise RuntimeError("OPENAI_MAX_COMPLETION_TOKENS must be non-negative.")
+    if settings.openai_max_completion_tokens:
+        options["max_completion_tokens"] = settings.openai_max_completion_tokens
+    return options
+
+
 def call_openai(prompt: str) -> TranslationResult:
     with get_openai_client() as client:
         if os.getenv("UST_PILOT_BUDGET_FILE"):
@@ -328,7 +345,7 @@ def call_openai(prompt: str) -> TranslationResult:
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            **(guarded if guarded else {"temperature": 0.1}),
+            **(guarded if guarded else provider_request_options()),
         )
 
     if not response.choices:

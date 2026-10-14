@@ -197,3 +197,15 @@ ust-dev-events gateway exposes authenticated import routes on the service
 networks without host ports. No service hooks are enabled. Real-library
 processing remains blocked by AUTOMATION_REAL_LIBRARY_PROCESSING=false and
 the selected-file scope is limited to retained fixtures.
+
+### Development translation model
+
+Prime development uses GPT-6 Luna with OPENAI_REASONING_EFFORT=medium and
+OPENAI_MAX_COMPLETION_TOKENS=32768. The completion limit covers both hidden
+reasoning and translated text. Explicit reasoning requests omit temperature.
+Keep these values in private dev/.env and recreate only the backend with
+./dev/ust up -d --no-deps backend after changing them. No image rebuild is needed.
+Normal automation remains paused and real-library processing remains disabled.
+The release example retains its existing model default.
+
+Model documentation: https://developers.openai.com/api/docs/models/gpt-6-luna

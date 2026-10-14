@@ -105,6 +105,8 @@ class Settings:
 
     openai_api_key: str | None = env_value("OPENAI_API_KEY")
     openai_model: str = env_value("OPENAI_MODEL", "gpt-4o-mini") or ""
+    openai_reasoning_effort: str | None = env_value("OPENAI_REASONING_EFFORT") or None
+    openai_max_completion_tokens: int = parse_int_env("OPENAI_MAX_COMPLETION_TOKENS", 0)
     auth_enabled: bool = parse_bool_env("AUTH_ENABLED", True)
     admin_username: str = env_value("ADMIN_USERNAME", "admin") or "admin"
     admin_password: str | None = env_value("ADMIN_PASSWORD", "admin") or "admin"
