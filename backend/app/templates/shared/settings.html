@@ -35,6 +35,9 @@
                 <table>
                     <tbody>
                         <tr><th>Model</th><td>{{ settings.openai_model }}</td></tr>
+                        <tr><th>Reasoning effort</th><td>{{ settings.openai_reasoning_effort or 'default' }}</td></tr>
+                        <tr><th>Completion capability</th><td>{{ settings.openai_max_completion_tokens }} tokens</td></tr>
+                        <tr><th>Daily API ceiling</th><td>{{ 'USD ' ~ settings.openai_daily_budget_usd if settings.openai_daily_budget_usd else 'Not configured' }} · UTC</td></tr>
                         <tr><th>Upload dir</th><td class="path">{{ settings.upload_dir }}</td></tr>
                         <tr><th>Output dir</th><td class="path">{{ settings.output_dir }}</td></tr>
                         <tr><th>Temp dir</th><td class="path">{{ settings.temp_dir }}</td></tr>
