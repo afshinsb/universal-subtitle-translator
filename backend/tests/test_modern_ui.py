@@ -288,3 +288,41 @@ def test_modern_login_uses_shared_account_without_private_state(client, monkeypa
         or client.get("/login?interface=legacy", follow_redirects=False).status_code
         == 303
     )
+
+
+def test_live_translation_progress_is_bounded_and_counts_completed_batches(client, tmp_path):
+    root = tmp_path / "media"
+    root.mkdir()
+    automation.save_config(False, [str(root)], {}, "events_only")
+    with get_connection() as c:
+        for i in range(8):
+            c.execute(
+                "INSERT INTO jobs(id,input_file,input_path,target_language,status,model,total_subtitles,translated_count,progress_percent,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (f"live{i}", f"Episode{i}.mkv", str(root / f"Episode{i}.mkv"), "Persian", "running", "test-model", 1000, 400, 40, "2026-10-15", "2026-10-15"),
+            )
+            c.execute(
+                "INSERT INTO automation_queue(id,video_path,origin,status,job_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (f"q{i}", str(root / f"Episode{i}.mkv"), "sonarr", "running", f"live{i}", "2026-10-15", "2026-10-15"),
+            )
+        # Parallel batches may finish out of order and alignment can be logged twice.
+        for batch in (3, 1, 3):
+            c.execute(
+                "INSERT INTO logs(job_id,level,event,message,batch_number,batch_count,created_at) VALUES('live0','INFO','batch_alignment_validated','Aligned',?,25,'2026-10-15')",
+                (batch,),
+            )
+    response = client.get("/ui/api/status")
+    assert response.status_code == 200
+    live = response.json()["active_media"]
+    assert len(live) == 6
+    first = next(x for x in live if x["id"] == "q0")
+    assert first["progress"] == 40 and first["translated_count"] == 400
+    assert first["total_subtitles"] == 1000
+    assert first["batches_completed"] == 2 and first["batch_count"] == 25
+    assert first["eta_seconds"] is None  # No measured provider latency yet.
+    with get_connection() as c:
+        c.execute("UPDATE jobs SET translated_count=520,progress_percent=52 WHERE id='live0'")
+    refreshed = client.get("/ui/api/queue?state=running").json()["items"][0]
+    assert refreshed["progress"] == 52
+    assert "owner" not in refreshed and "lease_until" not in refreshed
+    html = client.get("/ui/queue").text
+    assert 'id="live-translations"' in html and 'id="queue-running-count"' in html

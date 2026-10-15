@@ -113,3 +113,26 @@ Keep the automation enabled flag and all spending records intact. On health fail
 restore previous images/configuration, retaining new queue/ledger data. The added
 phase/current-finding columns and tables are additive and can remain for rollback.
 Do not modify media-service hooks or reset either application database for UI updates.
+
+
+## Live processing workspace
+
+Overview and Queue include a bounded live-translation area, with per-file cue
+progress, distinct completed-batch counts, current processing stage, measured ETA
+when available, confirmed API cost and a link to the existing job detail page.
+Progress is based on persisted completed cues; animation never invents completion.
+Parallel batches are counted distinctly even when logs repeat or finish out of order.
+The queue remains paginated (25 rows); the live area loads at most six running files.
+It does not launch workers or change scheduling or spending limits.
+
+Visible Overview, Queue and Intake pages poll every three seconds while work or
+upstream downloads are active, and every ten seconds while idle. Hidden pages stop
+polling, and resume on visibility. DOM patches preserve progress-bar elements,
+expanded paths and focus, enabling smooth transitions without whole-row flicker.
+Subtle entry, activity and progress animations respect reduced-motion preferences.
+On phones, records become labelled cards that retain progress, model, cost and actions.
+Grid tracks use bounded minimum widths to prevent overlapping panels and long names.
+
+Browser verification uses the isolated mock-provider QA container and 100 fixture
+queue records, including two artificial running-job records for rendering and update
+tests. These are never inserted into Production or presented as live production data.

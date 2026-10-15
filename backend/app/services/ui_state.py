@@ -105,7 +105,7 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
                 where.append("q.status NOT IN ('done','skipped','cancelled')")
         elif domain == "history":
             table = "jobs q"
-            select = "q.id,q.input_file,q.output_file,q.status,q.progress_percent AS progress,q.model,q.target_language,q.style,q.message,q.error,q.created_at,q.updated_at,q.batch_id"
+            select = "q.id,q.input_file,q.output_file,q.status,q.progress_percent AS progress,q.translated_count,q.total_subtitles,q.model,q.target_language,q.style,q.message,q.error,q.created_at,q.updated_at,q.batch_id"
             order = "q.created_at DESC,q.id"
             status = "q.status"
             text = "q.input_file"
@@ -185,7 +185,12 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
                     (row["job_id"],),
                 ).fetchone()
                 row["batch"] = log[0] if log else None
-                row["batch_count"] = log[1] if log else None
+                batch_stats = c.execute(
+                    "SELECT MAX(batch_count),COUNT(DISTINCT CASE WHEN event='batch_alignment_validated' THEN batch_number END) FROM logs WHERE job_id=?",
+                    (row["job_id"],),
+                ).fetchone()
+                row["batch_count"] = batch_stats[0] or (log[1] if log else None)
+                row["batches_completed"] = batch_stats[1]
             if domain == "downloads":
                 match = re.search(
                     r"(?:Season[ ._-]*(\d+)|S(\d{1,2})E)",
@@ -232,7 +237,7 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
                     / done
                     / max(1, settings.automation_batch_concurrency)
                 )
-                if done and total > done
+                if done and total > done and r["latency"] > 0
                 else None
             )
     return redacted(
@@ -325,6 +330,8 @@ def snapshot():
         "model": settings.openai_model,
         "reasoning": settings.openai_reasoning_effort or "default",
         "queue": queue,
+        # A bounded live read model, independent of the paginated history view.
+        "active_media": pagination("queue", state="running", size=6)["items"],
         "intake": intake,
         "upstream": upstream,
         "pending": sum(
