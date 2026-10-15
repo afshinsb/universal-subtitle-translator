@@ -158,3 +158,12 @@ button:active,.button:active { transform:translateY(1px); }
   #records-body .media-record>td:nth-child(1),#records-body .media-record>td:nth-child(2),#records-body .media-record>td:nth-child(5) { grid-column:1/-1; }
 }
 @media(prefers-reduced-motion:reduce) { .badge.active:before { animation:none; } }
+/* Confirm at the action, without a browser modal or blocking the rest of the page. */
+.inline-confirm { display:inline-flex; flex-wrap:wrap; align-items:center; gap:7px; max-width:100%; animation:confirm-arrive .2s ease-out; }
+.confirm-controls { display:inline-flex; gap:6px; flex-wrap:wrap; animation:confirm-controls-in .2s ease-out; }
+.confirm-hint { flex-basis:100%; font-size:11px; color:var(--muted); line-height:1.6; white-space:normal; overflow-wrap:anywhere; }
+.confirm-accept { background:var(--danger-bg); border-color:var(--danger); }
+.confirm-back { color:var(--muted); }
+@keyframes confirm-arrive { from { transform:translateX(4px); } to { transform:translateX(0); } }
+@keyframes confirm-controls-in { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
+@media(prefers-reduced-motion:reduce) { .inline-confirm,.confirm-controls { animation:none; } }

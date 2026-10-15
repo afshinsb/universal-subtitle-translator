@@ -20,7 +20,7 @@ from uuid import uuid4
 
 from app.config import settings
 from app.database import get_connection, utc_now, column_exists
-from app.services import automation, resources
+from app.services import automation, resources, intake_tracking
 from app.services.ffmpeg_service import get_media_info, list_subtitle_streams
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,9 @@ def init_schema():
                 if not item:
                     conn.execute("INSERT INTO media_intake(id,video_path,service,title,media_ids,imported_at,state,queue_id,updated_at) VALUES (?,?,?,?,?,?,'validation_pending',?,?)", (uuid4().hex,row['video_path'],row['origin'],Path(row['video_path']).stem,'{}',row['created_at'],row['id'],utc_now()))
                     conn.execute("UPDATE automation_queue SET status='waiting_intake',owner=NULL,lease_until=0 WHERE id=?",(row['id'],))
+
+    from app.services import intake_tracking
+    intake_tracking.init_schema()
 
 
 def services():
@@ -154,7 +157,7 @@ def ingest(service, payload, path, origin='webhook'):
                     state=CASE WHEN ? OR state IN ('invalid_media','preparation_failed','waiting_import','superseded') THEN 'validation_pending' ELSE state END,
                     next_run=0 WHERE id=?''',(title,json.dumps(ids),download,utc_now(),bool(changed),item_id))
             if download:
-                conn.execute("UPDATE upstream_activity SET state='imported',path=?,replaced_by=?,updated_at=? WHERE service=? AND download_id=?",
+                conn.execute("UPDATE upstream_activity SET state='imported',path=?,replaced_by=?,updated_at=? WHERE service=? AND lower(download_id)=lower(?)",
                              (str(path),download,utc_now(),service,download))
         return item_id
 
@@ -183,8 +186,10 @@ def cached_source(path):
 def update(item, state, error='', delay=0, **fields):
     fields.update(phase=None,state=state,error=error,next_run=time.time()+delay,owner=None,lease_until=0,updated_at=utc_now())
     with get_connection() as conn:
-        conn.execute('UPDATE media_intake SET '+','.join(k+'=?' for k in fields)+' WHERE id=? AND owner=?',
-                     [*fields.values(),item['id'],item['owner']])
+        changed = conn.execute('UPDATE media_intake SET '+','.join(k+'=?' for k in fields)+' WHERE id=? AND owner=?',
+                     [*fields.values(),item['id'],item['owner']]).rowcount
+        if changed and state in {'invalid_media','preparation_failed','superseded'} and item.get('queue_id'):
+            conn.execute("UPDATE automation_queue SET status='failed',message=?,owner=NULL,lease_until=0 WHERE id=? AND status IN ('waiting_intake','waiting_media','waiting_source')", (error,item['queue_id']))
 
 
 def claim():
@@ -231,7 +236,14 @@ def prepare_one():
         if not path.exists():
             ids=json.loads(item['media_ids'] or '{}')
             if ids.get('file') and item['service'] in services():
-                current=api(item['service'],'api/v3/'+('moviefile/' if item['service']=='radarr' else 'episodefile/')+str(ids['file']))
+                try:
+                    current=api(item['service'],'api/v3/'+('moviefile/' if item['service']=='radarr' else 'episodefile/')+str(ids['file']))
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 404:
+                        raise
+                    age=(datetime.now(timezone.utc)-datetime.fromisoformat(item['imported_at'].replace('Z','+00:00'))).total_seconds()
+                    update(item,'waiting_import' if age<120 else 'invalid_media','Imported file is missing and no longer known to ' + item['service'].title(),30 if age<120 else 0)
+                    return True
                 if current.get('path'):
                     new_path=automation.map_path(current['path'])
                     if new_path!=path:
@@ -353,7 +365,7 @@ def upstream(service, record, state):
     progress = 100*(1-(record.get('sizeleft',size)/size)) if size else None
     error = '; '.join(str(message) for entry in record.get('statusMessages',[]) for message in entry.get('messages',[]))
     with get_connection() as conn:
-        old = conn.execute('SELECT * FROM upstream_activity WHERE identity=?',(identity,)).fetchone()
+        old = conn.execute("SELECT a.*,coalesce(m.payload,'{}') AS metadata FROM upstream_activity a LEFT JOIN upstream_metadata m ON m.identity=a.identity WHERE a.identity=?",(identity,)).fetchone()
         now = time.time()
         same_state = old and (old['state']==state or old['state']=='download_stalled' and state=='downloading')
         changed = now if not old or old['progress']!=progress or not same_state else old['changed_at']
@@ -362,17 +374,34 @@ def upstream(service, record, state):
             error=error or 'No reported progress within configured warning threshold; download remains controlled by Arr.'
         if download and media_id:
             conn.execute("UPDATE upstream_activity SET replaced_by=? WHERE service=? AND media_id=? AND download_id<>? AND state IN ('download_failed','import_failed','import_rejected','download_stalled')", (download,service,media_id,download))
-        conn.execute('''INSERT INTO upstream_activity VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL)
+        metadata = record.get('_ust') or (json.loads(old['metadata'] or '{}') if old else {})
+        conn.execute('''INSERT INTO upstream_activity(identity,service,media_id,download_id,title,state,progress,path,error,first_seen,changed_at,updated_at,replaced_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL)
             ON CONFLICT(identity) DO UPDATE SET state=excluded.state,progress=excluded.progress,
             error=excluded.error,updated_at=excluded.updated_at,changed_at=excluded.changed_at,path=excluded.path,
             media_id=excluded.media_id,download_id=excluded.download_id,title=excluded.title''',
-            (identity,service,media_id,download,record.get('title') or record.get('sourceTitle') or identity,state,progress,
+            (identity,service,media_id,download,metadata.get('display_title') or record.get('title') or record.get('sourceTitle') or identity,state,progress,
              record.get('outputPath') or '',error,old['first_seen'] if old else now,changed,utc_now()))
+        conn.execute('INSERT OR REPLACE INTO upstream_metadata VALUES(?,?)',(identity,json.dumps(metadata)))
 
 
 def poll_arr(service, cursor):
-    queue = api(service,'api/v3/queue?page=1&pageSize=100&includeUnknownMovieItems=true&includeUnknownSeriesItems=true')
-    for item in queue.get('records',[]):
+    from app.services import intake_tracking
+    records = []
+    complete = False
+    for page in range(1, 6):
+        queue = api(service, 'api/v3/queue?' + urllib.parse.urlencode({'page':page,'pageSize':100,
+            'includeUnknownMovieItems':'true','includeUnknownSeriesItems':'true',
+            'includeMovie':'true','includeSeries':'true','includeEpisode':'true'}))
+        batch = queue.get('records', [])
+        records.extend(batch)
+        if len(batch) < 100 or len(records) >= queue.get('totalRecords', float('inf')):
+            complete = True
+            break
+    seen = set()
+    allowance = [4]
+    for item in records:
+        seen.add(service + ':queue:' + str(item.get('id') or item.get('downloadId')))
+        item = intake_tracking.enrich_arr(service, item, allowance)
         status = str(item.get('status','')).lower()
         tracked = str(item.get('trackedDownloadStatus','')).lower()
         state = {'queued':'download_queued','paused':'download_paused','downloading':'downloading','failed':'download_failed'}.get(status,'downloading')
@@ -423,6 +452,9 @@ def poll_arr(service, cursor):
         if boundary or len(records)<100:
             break
 
+    intake_tracking.reconcile_missing(service, seen, complete)
+    intake_tracking.refresh_stored_titles(service, allowance)
+
 
 def poll():
     with get_connection() as conn:
@@ -444,13 +476,10 @@ def poll():
             if service in {'sonarr','radarr'}:
                 poll_arr(service,dict(row))
             elif service=='seerr':
-                for request in api(service,'api/v1/request?take=25&skip=0&sort=added').get('results',[]):
-                    media=request.get('media') or {}
-                    upstream(service,{'id':request['id'],'title':media.get('title') or str(request.get('type'))+' TMDB '+str(media.get('tmdbId')),'mediaId':media.get('externalServiceId')},
-                             {1:'requested',2:'requested_approved',3:'request_declined'}.get(request.get('status'),'requested_unknown'))
+                intake_tracking.poll_seerr(dict(row))
             elif service=='qbit':
                 with get_connection() as conn:
-                    hashes=[r[0] for r in conn.execute("SELECT DISTINCT download_id FROM upstream_activity WHERE service IN ('radarr','sonarr') AND download_id IS NOT NULL AND state NOT IN ('imported','download_failed') LIMIT 100")]
+                    hashes=[r[0] for r in conn.execute("SELECT DISTINCT download_id FROM upstream_activity WHERE service IN ('radarr','sonarr') AND download_id IS NOT NULL AND state NOT IN ('imported','download_failed','download_removed','download_untracked') LIMIT 100")]
                 if hashes:
                     for torrent in api(service,'api/v2/torrents/info?'+urllib.parse.urlencode({'hashes':'|'.join(hashes)})):
                         state=torrent.get('state','')
@@ -479,7 +508,7 @@ def snapshot():
     with get_connection() as conn:
         rows=[dict(r) for r in conn.execute('''SELECT i.*,q.status AS translation_state FROM media_intake i
             LEFT JOIN automation_queue q ON q.id=i.queue_id ORDER BY i.updated_at DESC LIMIT 200''')]
-        upstream_rows=[dict(r) for r in conn.execute('SELECT * FROM upstream_activity ORDER BY updated_at DESC LIMIT 200')]
+        upstream_rows=[dict(r) for r in conn.execute('SELECT * FROM ' + intake_tracking.UPSTREAM_VIEW + ' ORDER BY updated_at DESC LIMIT 200')]
         cursors=[dict(r) for r in conn.execute('SELECT service,next_run,failures,error FROM intake_cursors')]
         counts=dict(conn.execute('SELECT state,COUNT(*) FROM media_intake GROUP BY state').fetchall())
     return {'imports':rows,'downloads':upstream_rows,'services':cursors,'counts':counts}

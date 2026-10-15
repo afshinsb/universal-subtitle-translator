@@ -121,7 +121,7 @@
             cleanupError.textContent = "";
             cleanupResult.hidden = true;
 
-            const confirmed = window.confirm(
+            const confirmed = window.UST.confirmAction ? await window.UST.confirmAction(cleanupButton, "Clear app history and app upload/output/temp files? External media subtitles are kept.") : window.confirm(
                 "Clear recent job history and delete files inside app upload/output/temp folders?\n\n" +
                 "Files saved next to movies or subtitles in external folders will NOT be deleted."
             );

@@ -216,6 +216,8 @@ def inspect(torrent, auto_remove=False, owner=None):
         raise RuntimeError('qBittorrent deletion not confirmed; no filesystem cleanup attempted')
     with get_connection() as conn:
         conn.execute('UPDATE download_guard_seen SET deleted=1 WHERE hash=?',(hash_value,))
+    from app.services import intake_tracking
+    intake_tracking.removed_by_guard(hash_value)
     current(torrent,'removed_by_guard',reason)
     activity(torrent,'deleted',reason+'; Arr confirmed no-video import rejection; qBittorrent removed torrent and data')
 

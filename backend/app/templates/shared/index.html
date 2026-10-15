@@ -145,7 +145,7 @@
 
             const overwrite = singleFileForm.querySelector("[name='overwrite_existing']").checked;
 
-            if (overwrite && !window.confirm("Overwrite existing target subtitles if they are found?")) {
+            if (overwrite && !(window.UST.confirmAction ? await window.UST.confirmAction(singleSubmit, "Replace existing target subtitles?") : window.confirm("Overwrite existing target subtitles if they are found?"))) {
                 return;
             }
 

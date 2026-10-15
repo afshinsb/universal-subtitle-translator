@@ -411,7 +411,7 @@
 
             const overwrite = form.querySelector("[name='overwrite_existing']").checked;
 
-            if (overwrite && !window.confirm("Scan with overwrite enabled? Existing target subtitles may be replaced when the batch starts.")) {
+            if (overwrite && !(window.UST.confirmAction ? await window.UST.confirmAction(scanButton, "Scan with overwrite enabled? Existing target subtitles may be replaced.") : window.confirm("Scan with overwrite enabled? Existing target subtitles may be replaced when the batch starts."))) {
                 return;
             }
 
@@ -496,7 +496,7 @@
 
             const overwrite = form.querySelector("[name='overwrite_existing']").checked;
 
-            if (overwrite && !window.confirm("Start this batch with overwrite enabled? Existing target subtitles may be replaced.")) {
+            if (overwrite && !(window.UST.confirmAction ? await window.UST.confirmAction(startButton, "Start this batch and replace existing target subtitles?") : window.confirm("Start this batch with overwrite enabled? Existing target subtitles may be replaced."))) {
                 return;
             }
 

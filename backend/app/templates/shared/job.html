@@ -109,7 +109,7 @@
         }
 
         cancelButton.addEventListener("click", async () => {
-            if (!window.confirm("Cancel this job? Completed output files will not be deleted.")) {
+            if (!(window.UST.confirmAction ? await window.UST.confirmAction(cancelButton, "Cancel this translation? Existing subtitles are kept.") : window.confirm("Cancel this job? Completed output files will not be deleted."))) {
                 return;
             }
 

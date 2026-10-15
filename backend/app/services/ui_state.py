@@ -1,8 +1,7 @@
 """Bounded, credential-free read models for the modern UI; no workers or queues."""
 
-import re
+import json
 import sqlite3
-from pathlib import Path
 
 from app.config import settings
 from app.database import get_connection, utc_now
@@ -11,6 +10,7 @@ from app.services import (
     daily_budget,
     download_guard,
     media_intake,
+    intake_tracking,
     resources,
 )
 
@@ -29,6 +29,16 @@ STATES = {
     "failed",
     "cancelled",
     "active",
+    "download_removed",
+    "download_untracked",
+    "status_unverified",
+    "request_failed",
+    "request_completed",
+    "request_available",
+    "request_partial",
+    "request_processing",
+    "request_deleted",
+    "request_blocked",
     "completed",
     "validation_pending",
     "waiting_stable",
@@ -60,6 +70,8 @@ def init_schema():
     with get_connection() as c:
         for sql in (
             "CREATE INDEX IF NOT EXISTS ui_queue_order ON automation_queue(created_at,id)",
+            "CREATE INDEX IF NOT EXISTS ui_queue_job ON automation_queue(job_id)",
+            "CREATE INDEX IF NOT EXISTS ui_intake_queue ON media_intake(queue_id)",
             "CREATE INDEX IF NOT EXISTS ui_jobs_time ON jobs(created_at)",
             "CREATE INDEX IF NOT EXISTS ui_logs_job ON logs(job_id,id)",
             "CREATE INDEX IF NOT EXISTS ui_intake_time ON media_intake(imported_at,id)",
@@ -111,12 +123,12 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
             text = "q.input_file"
         elif domain == "downloads":
             # Arr is authoritative. Do not double-count the same hash as qBit work.
-            table = """(SELECT 'upstream:'||identity AS id,title,service,state,progress,path,error,updated_at,
-                first_seen AS sort_time,media_id AS media_ids,download_id,NULL AS queue_id FROM upstream_activity a
-                WHERE service!='qbit' OR NOT EXISTS(SELECT 1 FROM upstream_activity b WHERE b.service IN ('sonarr','radarr') AND lower(b.download_id)=lower(a.download_id))
+            table = """(SELECT 'upstream:'||identity AS id,title,service,
+                CASE WHEN state IN ('downloading','download_queued','download_paused','download_complete') AND julianday(updated_at)<julianday('now','-2 minutes') THEN 'status_unverified' ELSE state END AS state,
+                progress,path,error,updated_at,first_seen AS sort_time,media_id AS media_ids,download_id,NULL AS queue_id,metadata,related_records FROM """ + intake_tracking.UPSTREAM_VIEW + """
                 UNION ALL SELECT 'intake:'||i.id,i.title,i.service,
                 CASE WHEN i.owner IS NOT NULL AND i.lease_until>strftime('%s','now') AND i.phase IS NOT NULL THEN i.phase WHEN q.status='running' THEN 'translating' WHEN q.status IN ('done','skipped') THEN 'completed' WHEN q.status IN ('failed','cancelled','waiting_budget','waiting_config') THEN q.status ELSE i.state END,
-                NULL,i.video_path,i.error,i.updated_at,strftime('%s',i.imported_at),i.media_ids,i.download_id,i.queue_id
+                NULL,i.video_path,i.error,i.updated_at,strftime('%s',i.imported_at),i.media_ids,i.download_id,i.queue_id,'{}',1
                 FROM media_intake i LEFT JOIN automation_queue q ON q.id=i.queue_id) q"""
             select = "q.*"
             order = "q.sort_time DESC,q.id"
@@ -129,7 +141,7 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
             args.append(state)
         if domain == "downloads" and state == "active":
             where.append(
-                "q.state NOT IN ('completed','cancelled','superseded','imported','request_declined')"
+                "q.state NOT IN ('completed','cancelled','superseded','imported','request_declined','download_removed','request_completed','request_available','request_deleted','request_blocked')"
             )
         if search:
             where.append(text + " LIKE ? ESCAPE '!' ")
@@ -159,7 +171,8 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
             if domain == "queue":
                 for hidden in ("owner", "lease_until", "signature"):
                     row.pop(hidden, None)
-                row["name"] = Path(row["video_path"]).name
+                title = c.execute("SELECT title FROM media_intake WHERE queue_id=? LIMIT 1", (row["id"],)).fetchone()
+                row["name"] = intake_tracking.display_name(title[0] if title else None, row["video_path"])
                 row["model"] = row["model"] or settings.openai_model
                 message = (row["detail"] or row["message"] or "").lower()
                 row["phase"] = (
@@ -192,19 +205,23 @@ def pagination(domain="queue", page=1, state="active", search="", size=25):
                 row["batch_count"] = batch_stats[0] or (log[1] if log else None)
                 row["batches_completed"] = batch_stats[1]
             if domain == "downloads":
-                match = re.search(
-                    r"(?:Season[ ._-]*(\d+)|S(\d{1,2})E)",
-                    row["path"] or row["title"] or "",
-                    re.I,
-                )
-                row["group"] = (
-                    (row["title"] or "Series")
-                    + " · Season "
-                    + str(int(match.group(1) or match.group(2))).zfill(2)
-                    if match
-                    else (row["service"] or "Import").title()
-                )
+                metadata = json.loads(row.pop("metadata", "{}") or "{}")
+                row["release_title"] = metadata.get("release_title", "")
+                row["name"] = intake_tracking.display_name(row["title"], row["path"]) if row["id"].startswith("intake:") else row["title"]
+                if row["service"] == "sonarr" and not row["id"].startswith("intake:"):
+                    episode_count = row.get("related_records", 1)
+                    if episode_count > 1:
+                        row["name"] += " · " + str(episode_count) + " episodes"
+                    elif metadata.get("episode") is not None:
+                        row["name"] += " · S" + str(metadata.get("season") or 0).zfill(2) + "E" + str(metadata["episode"]).zfill(2)
+                if row["service"] == "seerr" and metadata.get("seasons"):
+                    row["name"] += " · Season " + ", ".join(str(s) for s in metadata["seasons"] if s is not None)
+                row["group"] = "Imported files" if row["id"].startswith("intake:") else "Downloads" if row["service"] != "seerr" else "Requests"
                 row["eligible"] = bool(row["queue_id"])
+            if domain == "history":
+                media = c.execute("SELECT i.title,a.video_path FROM automation_queue a LEFT JOIN media_intake i ON i.queue_id=a.id WHERE a.job_id=? LIMIT 1", (row["id"],)).fetchone()
+                if media:
+                    row["name"] = intake_tracking.display_name(media["title"], media["video_path"])
     if domain == "queue":
         usage = {}
         if daily_budget.ledger_path().is_file() and rows:
@@ -268,7 +285,7 @@ def snapshot():
         )
         upstream = dict(
             c.execute(
-                "SELECT state,COUNT(*) FROM upstream_activity WHERE service IN ('sonarr','radarr') GROUP BY state"
+                "SELECT state,COUNT(*) FROM " + intake_tracking.UPSTREAM_VIEW + " WHERE service IN ('sonarr','radarr') GROUP BY state"
             ).fetchall()
         )
         today = c.execute(

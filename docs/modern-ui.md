@@ -3,7 +3,7 @@
 Both interfaces share the existing FastAPI application, session/account, production
 SQLite database, translation engine, queue, workers and provider/budget policy.
 No frontend framework, build server, runtime Node.js, replica or additional permanent
-container is introduced. The new static CSS and JS total approximately 48 KB.
+container is introduced. The new static CSS and JS total less than 75 KB.
 
 | Function | Modern | Legacy |
 | --- | --- | --- |
@@ -52,7 +52,7 @@ FIFO positions describe arrival order; fair scheduling can promote movies betwee
 series files. Cost labels distinguish confirmed usage and outstanding reservations.
 No ETA is fabricated when no measurable translated work exists.
 
-The browser updates every twelve seconds while visible, preserves input edits and
+The browser updates automatically while visible, preserves input edits and
 row order, and stops network polling while hidden. It never reloads the page to
 update progress. Existing per-job/batch monitoring remains tied to its existing
 workflow. Actions use the original authenticated endpoints and show success/failure.
@@ -136,3 +136,42 @@ Grid tracks use bounded minimum widths to prevent overlapping panels and long na
 Browser verification uses the isolated mock-provider QA container and 100 fixture
 queue records, including two artificial running-job records for rendering and update
 tests. These are never inserted into Production or presented as live production data.
+
+
+## Download identity, names and removal
+
+A season torrent is one download row, grouped by service and case-insensitive
+infohash. Individual imported video files remain separate intake/translation items.
+Download counts use the same grouped read model as the paginated table. Imported
+episodes use the media title and episode notation; cached source SRT identifiers
+are not used as titles in automatic translation history.
+
+Seerr titles are resolved through its read-only movie/TV details API and cached.
+Its current request and availability status enums follow
+[Seerr constants](https://github.com/seerr-team/seerr/blob/develop/server/constants/media.ts),
+including completed requests, partial availability and removed media. Completed
+requests leave Active; All states retains them. Newest requests and one rotating
+older page are refreshed with at most six metadata lookups per polling cycle.
+
+A missing Arr queue entry is reconciled only after a complete successful paginated
+queue read (up to five pages of 100) and an exact qBittorrent hash lookup. Imported
+file records take precedence. Confirmed missing downloads become Removed from
+downloads; incomplete/failed API reads never assert deletion. Download Guard's
+confirmed removals update this observation too. Removed records remain in history.
+Stale download observations show Status unavailable, not an indefinitely live
+percentage. None of these upstream states creates a translation job.
+
+Missing imported files with obsolete Arr file IDs get a short arrival grace period
+and then terminal validation failure. Corrupt media preparation has bounded retries;
+terminal failures retire any old gated queue entry. Missing English subtitles remain
+waiting without occupying translation workers. A later valid import is accepted
+normally. Existing history cursors and the events-only discovery policy are unchanged.
+The original upstream table layout is retained; new metadata is in a separate table
+so an image rollback can still write observations using the previous release.
+
+Modern confirmations appear beside the clicked action, with Confirm and Back,
+keyboard Escape and a short expiry. An open confirmation survives live row updates;
+no cancellation/removal request is sent until confirmed. Shared manual controls use
+the same helper in Modern, while Legacy retains its previous behavior. Automatic
+cleanup still requires the server-side confirmation flag and all existing safety checks.
+Polling implementation details are not shown as interface copy.
