@@ -19,7 +19,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.config import settings
-from app.database import get_connection, utc_now
+from app.database import get_connection, utc_now, column_exists
 from app.services import automation, resources
 from app.services.ffmpeg_service import get_media_info, list_subtitle_streams
 
@@ -35,6 +35,8 @@ def init_schema():
             source_path TEXT, source_hash TEXT, queue_id TEXT,
             next_run REAL DEFAULT 0, owner TEXT, lease_until REAL DEFAULT 0,
             attempts INTEGER DEFAULT 0, error TEXT DEFAULT '', updated_at TEXT)''')
+        if not column_exists(conn,'media_intake','phase'):
+            conn.execute('ALTER TABLE media_intake ADD COLUMN phase TEXT')
         conn.execute('CREATE INDEX IF NOT EXISTS intake_updated ON media_intake(updated_at)')
         conn.execute('CREATE INDEX IF NOT EXISTS intake_due ON media_intake(state,next_run)')
         conn.execute('''CREATE TABLE IF NOT EXISTS media_events (
@@ -179,7 +181,7 @@ def cached_source(path):
 
 
 def update(item, state, error='', delay=0, **fields):
-    fields.update(state=state,error=error,next_run=time.time()+delay,owner=None,lease_until=0,updated_at=utc_now())
+    fields.update(phase=None,state=state,error=error,next_run=time.time()+delay,owner=None,lease_until=0,updated_at=utc_now())
     with get_connection() as conn:
         conn.execute('UPDATE media_intake SET '+','.join(k+'=?' for k in fields)+' WHERE id=? AND owner=?',
                      [*fields.values(),item['id'],item['owner']])
@@ -301,7 +303,11 @@ def prepare_one():
             update(item,'completed','Existing embedded Persian subtitle preserved')
             return True
         stage='extraction'
-        source = automation.select_source(path,item['id'],streams,cancel_check=cancelled)
+        def phase(value):
+            with get_connection() as conn:
+                conn.execute('UPDATE media_intake SET phase=? WHERE id=? AND owner=?',(value,item['id'],item['owner']))
+        phase('discovering_subtitles')
+        source = automation.select_source(path,item['id'],streams,cancel_check=cancelled,phase_callback=phase)
         if automation.signature(path)!=signature:
             update(item,'waiting_stable','Import changed during inspection',10,stable_since=0)
             return True

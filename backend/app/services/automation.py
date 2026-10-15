@@ -310,7 +310,7 @@ def finish(item, status, message, delay=0, **fields):
                      + " WHERE id=? AND owner=?", [*fields.values(), item["id"], item["owner"]])
 
 
-def select_source(video, item_id, streams=None, cancel_check=None):
+def select_source(video, item_id, streams=None, cancel_check=None, phase_callback=None):
     """Reuse proven sidecar-first English selection; exclude forced/commentary."""
     candidates = []
     for path in sidecar_subtitles(video.parent, video.stem):
@@ -354,7 +354,11 @@ def select_source(video, item_id, streams=None, cancel_check=None):
             directory.mkdir(parents=True, exist_ok=True)
             output = directory / (video.stem + ".en.srt")
             output.unlink(missing_ok=True)
+            if phase_callback:
+                phase_callback('extracting')
             extract_subtitle(video, output, stream_index=chosen["index"], **({"cancel_check":cancel_check} if cancel_check else {}))
+            if phase_callback:
+                phase_callback('discovering_subtitles')
             if usable(output):
                 return output
     return None

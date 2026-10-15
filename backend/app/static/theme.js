@@ -144,8 +144,24 @@
         const lines = (payload.logs || []).map((log) =>
             `[${log.created_at}] ${log.level} ${log.event}: ${log.message}`
         );
-        await navigator.clipboard.writeText(lines.join("\n"));
-        setTemporaryButtonText(button, "Copied");
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(lines.join("\n"));
+            } else {
+                const field = document.createElement("textarea");
+                field.value = lines.join("\n");
+                field.style.position = "fixed";
+                field.style.opacity = "0";
+                document.body.append(field);
+                field.select();
+                const copied = document.execCommand("copy");
+                field.remove();
+                if (!copied) throw new Error("Clipboard unavailable");
+            }
+            setTemporaryButtonText(button, "Copied");
+        } catch (_) {
+            setTemporaryButtonText(button, "Use download");
+        }
     }
 
     window.UST = {

@@ -1978,3 +1978,7 @@ code {
         padding: 18px;
     }
 }
+
+/* Permanent Legacy navigation: the redesigned workspace is always reachable. */
+.interface-switch{margin:0;display:inline-flex}.interface-switch button{padding:7px 10px;font-size:12px}.nav>a[href$="#download-guard"]{white-space:nowrap}
+#download-guard{scroll-margin-top:20px}#download-guard td{overflow-wrap:anywhere}#download-guard table{table-layout:fixed}

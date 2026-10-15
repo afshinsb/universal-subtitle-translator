@@ -10,7 +10,7 @@ import urllib.parse
 from pathlib import PurePosixPath
 
 from app.config import settings
-from app.database import get_connection, utc_now
+from app.database import get_connection, utc_now, column_exists
 from app.services import media_intake
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,8 @@ def init_schema():
             id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER, auto_remove INTEGER,
             last_scan TEXT, last_error TEXT DEFAULT '', owner TEXT, lease_until REAL DEFAULT 0,
             offset INTEGER DEFAULT 0)''')
+        if not column_exists(conn,'download_guard_config','last_successful_scan'):
+            conn.execute('ALTER TABLE download_guard_config ADD COLUMN last_successful_scan TEXT')
         conn.execute('INSERT OR IGNORE INTO download_guard_config(id,enabled,auto_remove) VALUES(1,?,0)',
                      (settings.download_guard_enabled,))
         conn.execute('CREATE TABLE IF NOT EXISTS download_guard_cursor(category TEXT PRIMARY KEY,offset INTEGER DEFAULT 0)')
@@ -36,6 +38,39 @@ def init_schema():
         conn.execute('''CREATE TABLE IF NOT EXISTS download_guard_activity (
             id INTEGER PRIMARY KEY, timestamp TEXT, hash TEXT, name TEXT,
             action TEXT, reason TEXT, identity TEXT UNIQUE)''')
+
+        conn.execute("""CREATE TABLE IF NOT EXISTS download_guard_current (
+            hash TEXT PRIMARY KEY,name TEXT,category TEXT,state TEXT,reason TEXT,
+            verified_at REAL DEFAULT 0,updated_at TEXT)""")
+        conn.execute("""INSERT OR IGNORE INTO download_guard_current(hash,name,state,reason,updated_at)
+            SELECT hash,MAX(name),'unverified','Historical detection; awaiting current API verification',MAX(timestamp)
+            FROM download_guard_activity WHERE action='detected' GROUP BY hash""")
+
+
+def current(torrent,state,reason):
+    with get_connection() as conn:
+        conn.execute("""INSERT INTO download_guard_current VALUES(?,?,?,?,?,?,?)
+            ON CONFLICT(hash) DO UPDATE SET name=excluded.name,category=excluded.category,
+            state=excluded.state,reason=excluded.reason,verified_at=excluded.verified_at,updated_at=excluded.updated_at""",
+            (torrent.get('hash',''),torrent.get('name',''),torrent.get('category',''),state,reason,time.time(),utc_now()))
+
+
+def presence(torrent,files):
+    dangerous=[f for f in files if PurePosixPath(f.get('name','')).suffix.lower() in DANGEROUS]
+    if not dangerous:
+        return 'clear'
+    if torrent.get('progress',0)!=1:
+        return 'pending_verification'
+    found=False
+    for entry in dangerous:
+        try:
+            file_paths(torrent,[entry])
+            found=True
+        except FileNotFoundError:
+            continue
+        except (ValueError,OSError,KeyError):
+            return 'unverified'
+    return 'suspicious' if found else 'payload_missing'
 
 
 def configure(enabled, auto_remove):
@@ -139,6 +174,7 @@ def fingerprint(torrent, files):
 
 def inspect(torrent, auto_remove=False, owner=None):
     if torrent.get('category') not in CATEGORIES:
+        current(torrent,'category_changed','Outside media categories; never removed')
         activity(torrent,'ignored','Unrelated download category; ignored')
         return
     hash_value=torrent.get('hash','')
@@ -147,6 +183,8 @@ def inspect(torrent, auto_remove=False, owner=None):
         return
     files=media_intake.api('qbit','api/v2/torrents/files?'+urllib.parse.urlencode({'hash':hash_value}))
     valid,reason=classify(torrent,files)
+    state=presence(torrent,files)
+    current(torrent,state,reason if state!='payload_missing' else 'Payload absent (previously removed or unavailable); audit history retained, no cleanup')
     suspicious=any(PurePosixPath(f.get('name','')).suffix.lower() in DANGEROUS for f in files)
     if not valid:
         activity(torrent,'detected' if suspicious else 'ignored',reason)
@@ -164,9 +202,9 @@ def inspect(torrent, auto_remove=False, owner=None):
         activity(torrent,'detected',reason+'; Arr rejected import; dry-run/stability hold')
         return
     # Re-fetch identity, completion, file list and import state immediately before API deletion.
-    current=media_intake.api('qbit','api/v2/torrents/info?'+urllib.parse.urlencode({'hashes':hash_value}))
+    fresh=media_intake.api('qbit','api/v2/torrents/info?'+urllib.parse.urlencode({'hashes':hash_value}))
     fresh_files=media_intake.api('qbit','api/v2/torrents/files?'+urllib.parse.urlencode({'hash':hash_value}))
-    if len(current)!=1 or current[0]['hash']!=hash_value or fresh_files!=files or not classify(current[0],fresh_files)[0] or fingerprint(current[0],fresh_files)!=signature or not rejected_by_arr(current[0]):
+    if len(fresh)!=1 or fresh[0]['hash']!=hash_value or fresh_files!=files or not classify(fresh[0],fresh_files)[0] or fingerprint(fresh[0],fresh_files)!=signature or not rejected_by_arr(fresh[0]):
         activity(torrent,'detected','Torrent or import state changed before cleanup; no removal')
         return
     with get_connection() as conn:
@@ -178,20 +216,34 @@ def inspect(torrent, auto_remove=False, owner=None):
         raise RuntimeError('qBittorrent deletion not confirmed; no filesystem cleanup attempted')
     with get_connection() as conn:
         conn.execute('UPDATE download_guard_seen SET deleted=1 WHERE hash=?',(hash_value,))
+    current(torrent,'removed_by_guard',reason)
     activity(torrent,'deleted',reason+'; Arr confirmed no-video import rejection; qBittorrent removed torrent and data')
 
 
-def scan():
+def scan(dry_run=False):
     with get_connection() as conn:
         conn.execute('BEGIN IMMEDIATE')
         cfg=conn.execute('SELECT * FROM download_guard_config WHERE id=1').fetchone()
-        if not cfg['enabled'] or cfg['lease_until']>time.time():
+        if (not cfg['enabled'] and not dry_run) or cfg['lease_until']>time.time():
             return
         owner=str(time.time())
         conn.execute('UPDATE download_guard_config SET owner=?,lease_until=? WHERE id=1',(owner,time.time()+300))
     error=''
     try:
-        # Max 20 file lists/category each scan; persistent rotating offset.
+        # Exact-hash reconciliation distinguishes removed identities from paginated absence.
+        with get_connection() as conn:
+            tracked=[dict(r) for r in conn.execute("SELECT * FROM download_guard_current WHERE state!='removed_by_guard' ORDER BY verified_at LIMIT 20")]
+        if tracked:
+            actual=media_intake.api('qbit','api/v2/torrents/info?'+urllib.parse.urlencode({'hashes':'|'.join(r['hash'] for r in tracked)}))
+            present={t['hash']:t for t in actual}
+            for row in tracked:
+                if row['hash'] not in present:
+                    current(row,'torrent_removed','Torrent identity no longer exists; historical audit retained')
+                elif present[row['hash']].get('category') not in CATEGORIES:
+                    current(present[row['hash']],'category_changed','Outside media categories; never removed')
+                else:
+                    inspect(present[row['hash']],False,owner)  # Reconciliation is always non-destructive.
+        # Max 20 file lists/category plus 20 reconciled identities each scan.
         for category in CATEGORIES:
             with get_connection() as conn:
                 offset=conn.execute('SELECT offset FROM download_guard_cursor WHERE category=?',(category,)).fetchone()[0]
@@ -201,12 +253,13 @@ def scan():
                 try:
                     with get_connection() as conn:
                         conn.execute('UPDATE download_guard_config SET lease_until=? WHERE id=1 AND owner=?',(time.time()+300,owner))
-                    inspect(torrent,bool(cfg['auto_remove']),owner)
+                    inspect(torrent,bool(cfg['auto_remove']) and not dry_run,owner)
                 except Exception as exc:
                     activity(torrent,'failed',type(exc).__name__+': '+str(exc))
             with get_connection() as conn:
                 conn.execute('UPDATE download_guard_cursor SET offset=? WHERE category=?',(next_offset,category))
         with get_connection() as conn:
+            conn.execute('UPDATE download_guard_config SET last_successful_scan=? WHERE id=1 AND owner=?',(utc_now(),owner))
             conn.execute('DELETE FROM download_guard_seen WHERE first_seen<? AND deleted=0',(time.time()-30*86400,))
     except Exception as exc:
         error=type(exc).__name__+': '+str(exc)
@@ -218,9 +271,12 @@ def scan():
 
 def snapshot():
     with get_connection() as conn:
-        cfg=dict(conn.execute('SELECT enabled,auto_remove,last_scan,last_error FROM download_guard_config WHERE id=1').fetchone())
+        cfg=dict(conn.execute('SELECT enabled,auto_remove,last_scan,last_successful_scan,last_error,lease_until FROM download_guard_config WHERE id=1').fetchone())
         cfg['recent']=[dict(r) for r in conn.execute('SELECT * FROM download_guard_activity ORDER BY id DESC LIMIT 20')]
-        cfg['suspicious_count']=conn.execute("SELECT COUNT(DISTINCT hash) FROM download_guard_activity WHERE action='detected' AND hash NOT IN(SELECT hash FROM download_guard_seen WHERE deleted=1)").fetchone()[0]
+        cfg['current']=[dict(r) for r in conn.execute('SELECT * FROM download_guard_current ORDER BY verified_at DESC LIMIT 100')]
+        cfg['suspicious_count']=conn.execute("SELECT COUNT(*) FROM download_guard_current WHERE state='suspicious' AND verified_at>?",(time.time()-900,)).fetchone()[0]
+        cfg['historical_count']=conn.execute("SELECT COUNT(DISTINCT hash) FROM download_guard_activity WHERE action='detected'").fetchone()[0]
+        cfg['scanning']=cfg.pop('lease_until')>time.time()
         cfg['removed_count']=conn.execute('SELECT COUNT(*) FROM download_guard_seen WHERE deleted=1').fetchone()[0]
     return cfg
 
@@ -229,6 +285,12 @@ class Worker:
     def __init__(self):
         self.stop_event=threading.Event()
         self.thread=None
+        self.wakeup=threading.Event()
+        self.manual_requested=False
+
+    def request_scan(self):
+        self.manual_requested=True
+        self.wakeup.set()
 
     def start(self):
         if not self.thread:
@@ -237,14 +299,21 @@ class Worker:
             self.thread.start()
 
     def run(self):
-        while not self.stop_event.wait(300):
+        while not self.stop_event.is_set():
+            self.wakeup.wait(300)
+            self.wakeup.clear()
+            if self.stop_event.is_set():
+                break
+            manual=self.manual_requested
+            self.manual_requested=False
             try:
-                scan()
+                scan(dry_run=manual)
             except Exception:
                 logger.exception('Download Guard deferred')
 
     def stop(self):
         self.stop_event.set()
+        self.wakeup.set()
         if self.thread:
             self.thread.join(timeout=2)
         self.thread=None

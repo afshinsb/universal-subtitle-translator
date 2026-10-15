@@ -8,7 +8,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import automation, daily_budget, resources, media_intake, download_guard
+from app.services import automation, daily_budget, resources, media_intake, download_guard, ui_state
 from app.template_context import configure_templates
 
 router = APIRouter(prefix="/automation")
@@ -25,7 +25,7 @@ def check_origin(request):
 def dashboard(request: Request):
     cfg = automation.config()
     return templates.TemplateResponse(request=request, name="automation.html", context={
-        "guard": download_guard.snapshot(), "active_model": automation.settings.openai_model, "active_reasoning": automation.settings.openai_reasoning_effort or "default", "intake": media_intake.snapshot(), "resources": resources.status(), "config": cfg, "queue": automation.list_queue(), "counts": automation.counts(),
+        "guard": download_guard.snapshot(), "active_model": automation.settings.openai_model, "active_reasoning": automation.settings.openai_reasoning_effort or "default", "intake": media_intake.snapshot(), "resources": resources.status(), "config": cfg, "queue": ui_state.redacted(automation.list_queue()), "counts": automation.counts(),
         "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(),
         "roots_text": "\n".join(cfg["roots"]),
         "allowed_files_text": "\n".join(cfg.get("allowed_files", [])),
@@ -36,8 +36,8 @@ def dashboard(request: Request):
 @router.get("/status")
 def status():
     cfg = automation.config()
-    return {"enabled": cfg["enabled"], "roots": cfg["roots"], "scope_mode": cfg.get("scope_mode", "libraries"), "allowed_files": cfg.get("allowed_files", []), "counts": automation.counts(),
-            "guard": download_guard.snapshot(), "intake": media_intake.snapshot(), "resources": resources.status(), "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(), "discovery_mode": cfg.get("discovery_mode", "reconcile_libraries"), "queue": automation.list_queue()}
+    return ui_state.redacted({"enabled": cfg["enabled"], "roots": cfg["roots"], "scope_mode": cfg.get("scope_mode", "libraries"), "allowed_files": cfg.get("allowed_files", []), "counts": automation.counts(),
+            "guard": download_guard.snapshot(), "intake": media_intake.snapshot(), "resources": resources.status(), "provider_ready": bool(automation.settings.openai_api_key), "budget": daily_budget.status(), "discovery_mode": cfg.get("discovery_mode", "reconcile_libraries"), "queue": automation.list_queue()})
 
 
 @router.post("/settings")
@@ -187,10 +187,28 @@ async def webhook(service: str, request: Request):
 
 
 @router.post("/download-guard/settings")
-def guard_settings(request: Request, enabled: bool = Form(False), auto_remove: bool = Form(False)):
+def guard_settings(request: Request, enabled: bool = Form(False), auto_remove: bool = Form(False), confirm_remove: bool = Form(False)):
     check_origin(request)
     try:
+        if auto_remove and not download_guard.snapshot()["auto_remove"] and not confirm_remove:
+            raise ValueError("Confirm strict automatic torrent/data removal before enabling.")
         download_guard.configure(enabled,auto_remove)
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from exc
     return RedirectResponse("/automation",status_code=303)
+
+
+@router.post("/download-guard/scan",status_code=202)
+def guard_scan(request:Request):
+    check_origin(request)
+    if 'qbit' not in media_intake.services():
+        raise HTTPException(409,'Configure the private qBittorrent connection before scanning.')
+    download_guard.worker.request_scan()
+    return {"status":"requested","dry_run":True}
+
+
+@router.post('/integration-token')
+def integration_token(request:Request):
+    check_origin(request)
+    from fastapi.responses import JSONResponse
+    return JSONResponse({'token':automation.config()['webhook_token']},headers={'Cache-Control':'no-store'})

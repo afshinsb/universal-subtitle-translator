@@ -15,6 +15,8 @@ from app.routes import auth, jobs, files, settings as settings_routes, logs, bat
 from app.services.job_runner import repair_stale_work, request_shutdown
 from app.services import automation, media_intake, download_guard
 from app.routes import automation as automation_routes
+from app.routes import modern
+from app.services import ui_state
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ async def lifespan(app):
     automation.init_schema()
     media_intake.init_schema()
     download_guard.init_schema()
+    ui_state.init_schema()
     download_guard.worker.start()
     media_intake.worker.start()
     automation.worker.start()
@@ -69,11 +72,16 @@ async def auth_middleware(request: Request, call_next):
             content={"error": "Authentication setup is incomplete. Check AUTH_ENABLED, ADMIN_PASSWORD and SESSION_SECRET."},
         )
 
-    if not settings.auth_enabled:
-        return await call_next(request)
+    if not settings.auth_enabled or request.session.get("authenticated") is True:
+        if request.method=='GET' and request.cookies.get('ust_interface')=='modern' and ('text/html' in request.headers.get('accept','')):
+            if path=='/':
+                return RedirectResponse('/ui',status_code=303)
+            if (path.startswith('/jobs/') or path.startswith('/batches/')) and not path.endswith(('/download','/status','.csv','.json','/events')):
+                return RedirectResponse('/ui'+path,status_code=303)
 
-    if request.session.get("authenticated") is True:
-        return await call_next(request)
+        response=await call_next(request)
+        response.headers['Cache-Control']='no-store'
+        return response
 
     if wants_html(request):
         next_url = quote(str(request.url.path), safe="/")
@@ -130,6 +138,7 @@ app.include_router(logs.router)
 app.include_router(batches.router)
 app.include_router(cleanup_routes.router)
 app.include_router(automation_routes.router)
+app.include_router(modern.router)
 
 
 @app.get("/health")

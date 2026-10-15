@@ -12,6 +12,12 @@ router = APIRouter()
 templates = configure_templates(Jinja2Templates(directory="app/templates"))
 
 
+def login_template(request,next_url):
+    if request.query_params.get('interface')=='legacy':
+        return 'login.html'
+    return 'modern/login.html' if request.cookies.get('ust_interface')=='modern' or next_url.startswith('/ui') else 'login.html'
+
+
 def safe_next_url(next_url: str | None) -> str:
     if not next_url:
         return "/"
@@ -47,7 +53,7 @@ def login_page(request: Request, next: str | None = None):
 
     return templates.TemplateResponse(
         request=request,
-        name="login.html",
+        name=login_template(request,next_url),
         context={
             "next_url": next_url,
             "error": "",
@@ -72,7 +78,7 @@ def login_submit(
     if setup_errors:
         return templates.TemplateResponse(
             request=request,
-            name="login.html",
+            name=login_template(request,next_url),
             context={
                 "next_url": next_url,
                 "error": "Login is not ready. Fix the setup items below, then restart the app.",
@@ -87,7 +93,7 @@ def login_submit(
     if not username_ok or not password_ok:
         return templates.TemplateResponse(
             request=request,
-            name="login.html",
+            name=login_template(request,next_url),
             context={
                 "next_url": next_url,
                 "error": "Invalid username or password.",

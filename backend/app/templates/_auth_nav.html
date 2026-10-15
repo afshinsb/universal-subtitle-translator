@@ -1,3 +1,5 @@
+<form method="post" action="/ui/interface" class="interface-switch"><input type="hidden" name="mode" value="modern"><input type="hidden" name="target" value="/ui"><button type="submit">Modern UI ↗</button></form>
+<a href="/automation#download-guard">Download Guard</a>
 {% set signed_in_user = current_username(request) %}
 {% if signed_in_user or not auth_enabled %}
     <div class="account-menu">

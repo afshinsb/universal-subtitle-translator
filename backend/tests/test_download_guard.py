@@ -173,3 +173,37 @@ def test_categories_have_independent_bounded_scan_cursors(example,monkeypatch):
     guard.scan()
     guard.scan()
     assert offsets==[('tv-sonarr',0),('radarr',0),('tv-sonarr',20),('radarr',0)]
+
+
+def test_payload_removed_is_history_not_current_threat(example):
+    torrent,files,path,calls=example
+    guard.inspect(torrent)
+    assert guard.snapshot()['suspicious_count']==1
+    path.unlink()  # Test fixture represents the user's prior manual removal.
+    guard.inspect(torrent)
+    snapshot=guard.snapshot()
+    assert snapshot['suspicious_count']==0 and snapshot['historical_count']==1
+    assert snapshot['current'][0]['state']=='payload_missing'
+    assert snapshot['recent'] and not calls
+
+
+def test_exact_missing_identity_is_reconciled_not_confused_with_pagination(example,monkeypatch):
+    torrent,files,path,calls=example
+    guard.configure(True,False)
+    guard.inspect(torrent)
+    monkeypatch.setattr(media_intake,'api',lambda *args:[])
+    guard.scan(dry_run=True)
+    snapshot=guard.snapshot()
+    assert snapshot['suspicious_count']==0 and snapshot['historical_count']==1
+    assert snapshot['current'][0]['state']=='torrent_removed'
+    assert not calls
+
+
+def test_manual_scan_never_deletes_when_auto_mode_is_enabled(example):
+    torrent,files,path,calls=example
+    guard.configure(True,False)
+    guard.inspect(torrent)
+    arm()
+    guard.scan(dry_run=True)
+    assert not calls and path.exists()
+    assert guard.snapshot()['last_successful_scan']
