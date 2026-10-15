@@ -25,6 +25,10 @@ Explicit `/automation` remains Legacy regardless of preference. HTML job/batch l
 follow the chosen interface; downloads, JSON, CSV and event endpoints keep their
 original behavior. Modern sign-in uses the same `/login` handler and session.
 
+Modern uses neutral graphite surfaces and a restrained indigo accent in both dark
+and light themes. Its stylesheet URL is versioned when the palette changes so
+returning browsers load the current appearance. Legacy keeps its original theme.
+
 Legacy template files remain, with their manual forms/scripts extracted into shared
 partials used by both shells. Modern CSS/JS are separate from Legacy theme assets.
 Language/style options, uploads, overwrite confirmation, folder selection/scanning,
