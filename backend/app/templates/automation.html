@@ -140,7 +140,7 @@ document.getElementById('scan').addEventListener('click', async () => {
 const guardForm=document.getElementById('guard-settings-form');
 guardForm.addEventListener('submit',e=>{
  if(guardForm.auto_remove.checked && !{{ guard.auto_remove|tojson }}) {
-  if(!confirm('Enable strict automatic removal of confirmed executable-only media torrents AND their downloaded data? Mixed, incomplete and uncertain downloads are never removed.')) {e.preventDefault();return;}
+  if(!confirm('Enable strict automatic removal of confirmed executable-only media torrents AND their downloaded data? Mixed, incomplete and uncertain downloads are never removed.')) {e.preventDefault();guardForm.auto_remove.checked=false;document.getElementById('guard-feedback').textContent='Automatic removal remains off.';return;}
   document.getElementById('guard-confirm').value='true';
  }
 });

@@ -3,7 +3,7 @@
 Both interfaces share the existing FastAPI application, session/account, production
 SQLite database, translation engine, queue, workers and provider/budget policy.
 No frontend framework, build server, runtime Node.js, replica or additional permanent
-container is introduced. The new static CSS and JS total approximately 44 KB.
+container is introduced. The new static CSS and JS total approximately 48 KB.
 
 | Function | Modern | Legacy |
 | --- | --- | --- |
